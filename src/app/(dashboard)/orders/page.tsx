@@ -27,7 +27,9 @@ import {
   Truck,
   Package,
   Factory,
+  Eye,
 } from "lucide-react";
+import Link from "next/link";
 import { orderProductionStatusLabels, type OrderProductionStatus } from "@/types";
 
 function statusBadge(status: string) {
@@ -132,7 +134,11 @@ export default function OrdersPage() {
             {orders.map((order) => (
               <TableRow key={order.id}>
                 <TableCell>{platformBadge(order.platform)}</TableCell>
-                <TableCell className="font-mono text-sm">{order.orderId}</TableCell>
+                <TableCell className="font-mono text-sm">
+                  <Link href={`/orders/${order.id}`} className="text-blue-600 hover:underline">
+                    {order.orderId}
+                  </Link>
+                </TableCell>
                 <TableCell className="font-mono text-sm">{order.sku}</TableCell>
                 <TableCell className="hidden md:table-cell text-sm">
                   <div>
@@ -155,19 +161,26 @@ export default function OrdersPage() {
                   {new Date(order.orderDate).toLocaleDateString("vi-VN")}
                 </TableCell>
                 <TableCell>
-                  <Select
-                    value={order.productionStatus}
-                    onValueChange={(v) => handleStatusChange(order.id, v)}
-                  >
-                    <SelectTrigger className="h-7 text-xs w-[110px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(orderProductionStatusLabels).map(([k, v]) => (
-                        <SelectItem key={k} value={k} className="text-xs">{v}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={order.productionStatus}
+                      onValueChange={(v) => handleStatusChange(order.id, v)}
+                    >
+                      <SelectTrigger className="h-7 text-xs w-[110px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(orderProductionStatusLabels).map(([k, v]) => (
+                          <SelectItem key={k} value={k} className="text-xs">{v}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+                      <Link href={`/orders/${order.id}`}>
+                        <Eye className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

@@ -32,6 +32,7 @@ const pathLabels: Record<string, string> = {
   accounts: "Tài khoản",
   tools: "Tools",
   notifications: "Thông báo",
+  settings: "Cài đặt",
   new: "Tạo mới",
 };
 
@@ -53,16 +54,18 @@ export function TopBar() {
             const label = pathLabels[segment] || segment;
 
             return (
-              <BreadcrumbItem key={href}>
+              <span key={href} className="contents">
                 {index > 0 && <BreadcrumbSeparator />}
-                {isLast ? (
-                  <BreadcrumbPage>{label}</BreadcrumbPage>
-                ) : (
-                  <BreadcrumbLink asChild>
-                    <Link href={href}>{label}</Link>
-                  </BreadcrumbLink>
-                )}
-              </BreadcrumbItem>
+                <BreadcrumbItem>
+                  {isLast ? (
+                    <BreadcrumbPage>{label}</BreadcrumbPage>
+                  ) : (
+                    <BreadcrumbLink asChild>
+                      <Link href={href}>{label}</Link>
+                    </BreadcrumbLink>
+                  )}
+                </BreadcrumbItem>
+              </span>
             );
           })}
         </BreadcrumbList>

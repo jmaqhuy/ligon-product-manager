@@ -2,9 +2,10 @@ import { auth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { db } from "@/lib/db";
-import { Lightbulb, Image, CheckCircle, Upload, Factory, ShoppingCart, Truck, Bell } from "lucide-react";
+import { Lightbulb, Image, CheckCircle, Upload, Factory, ShoppingCart, Bell } from "lucide-react";
 import Link from "next/link";
 import { can, type Role } from "@/lib/permissions";
+import { DashboardCharts } from "./charts";
 
 async function getStats(userId: string, role: Role) {
   const isAdmin = can(role, "view_all_stats");
@@ -37,12 +38,44 @@ async function getStats(userId: string, role: Role) {
   return { reviewing, awaitingPhotos, photoApproved, published, productionPending, productionActive, ordersProducing, unreadNotifications };
 }
 
+async function getRecentActivity() {
+  const [recentIdeas, recentOrders] = await Promise.all([
+    db.idea.findMany({
+      take: 5,
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        msku: true,
+        title: true,
+        status: true,
+        createdAt: true,
+        createdBy: { select: { nameAbbreviation: true } },
+      },
+    }),
+    db.order.findMany({
+      take: 5,
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        orderId: true,
+        customerName: true,
+        platform: true,
+        productionStatus: true,
+        createdAt: true,
+      },
+    }),
+  ]);
+
+  return { recentIdeas, recentOrders };
+}
+
 export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user) return null;
 
   const role = session.user.role as Role;
   const stats = await getStats(session.user.id, role);
+  const activity = await getRecentActivity();
 
   const ideaCards = [
     { title: "Chờ xem xét", value: stats.reviewing, icon: Lightbulb, href: "/ideas?tab=reviewing", color: "text-amber-600", bgColor: "bg-amber-50 dark:bg-amber-950/30" },
@@ -57,6 +90,20 @@ export default async function DashboardPage() {
     { title: "Đơn đang SX", value: stats.ordersProducing, icon: ShoppingCart, href: "/orders?tab=producing", color: "text-purple-600", bgColor: "bg-purple-50 dark:bg-purple-950/30" },
     { title: "Thông báo", value: stats.unreadNotifications, icon: Bell, href: "/notifications", color: "text-red-600", bgColor: "bg-red-50 dark:bg-red-950/30" },
   ];
+
+  const statusBadge = (status: string) => {
+    const map: Record<string, { label: string; className: string }> = {
+      reviewing: { label: "Xem xét", className: "bg-amber-100 text-amber-800 border-amber-200" },
+      approved: { label: "Đã duyệt", className: "bg-blue-100 text-blue-800 border-blue-200" },
+      published: { label: "Đã đăng", className: "bg-green-100 text-green-800 border-green-200" },
+      producing: { label: "Đang SX", className: "bg-orange-100 text-orange-800 border-orange-200" },
+      produced: { label: "Đã SX", className: "bg-cyan-100 text-cyan-800 border-cyan-200" },
+      awaiting_fulfillment: { label: "Chờ FF", className: "bg-purple-100 text-purple-800 border-purple-200" },
+      fulfilled: { label: "Đã FF", className: "bg-green-100 text-green-800 border-green-200" },
+    };
+    const s = map[status] || { label: status, className: "" };
+    return <Badge variant="outline" className={`text-[10px] ${s.className}`}>{s.label}</Badge>;
+  };
 
   return (
     <div className="space-y-6">
@@ -118,7 +165,80 @@ export default async function DashboardPage() {
           ))}
         </div>
       </div>
+
+      {/* Monthly Charts (client component) */}
+      <DashboardCharts />
+
+      {/* Recent Activity */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Recent Ideas */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Ý tưởng gần đây</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {activity.recentIdeas.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">Chưa có ý tưởng nào</p>
+            ) : (
+              <div className="space-y-3">
+                {activity.recentIdeas.map((idea) => (
+                  <Link
+                    key={idea.id}
+                    href={`/ideas/${idea.id}`}
+                    className="flex items-center justify-between rounded-lg border p-3 hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{idea.title || idea.msku}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <code className="text-[10px] bg-muted px-1 py-0.5 rounded font-mono">{idea.msku}</code>
+                        <span className="text-[10px] text-muted-foreground">
+                          {idea.createdBy.nameAbbreviation}
+                        </span>
+                      </div>
+                    </div>
+                    {statusBadge(idea.status)}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Recent Orders */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Đơn hàng gần đây</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {activity.recentOrders.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">Chưa có đơn hàng nào</p>
+            ) : (
+              <div className="space-y-3">
+                {activity.recentOrders.map((order) => (
+                  <Link
+                    key={order.id}
+                    href={`/orders/${order.id}`}
+                    className="flex items-center justify-between rounded-lg border p-3 hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">#{order.orderId}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <Badge variant="outline" className="text-[10px]">
+                          {order.platform === "amazon" ? "Amazon" : "Etsy"}
+                        </Badge>
+                        <span className="text-[10px] text-muted-foreground truncate">
+                          {order.customerName}
+                        </span>
+                      </div>
+                    </div>
+                    {statusBadge(order.productionStatus)}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
-

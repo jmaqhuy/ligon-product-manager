@@ -12,6 +12,7 @@ import {
   Wrench,
   Bell,
   ChevronUp,
+  Settings,
 } from "lucide-react";
 import {
   Sidebar,
@@ -73,6 +74,11 @@ const navItems = [
     title: "Tools",
     href: "/tools",
     icon: Wrench,
+  },
+  {
+    title: "Cài đặt",
+    href: "/settings",
+    icon: Settings,
   },
 ];
 
@@ -187,7 +193,7 @@ export function AppSidebar() {
                 sideOffset={4}
               >
                 <DropdownMenuItem asChild>
-                  <Link href="/accounts">Thông tin cá nhân</Link>
+                  <Link href="/settings">Cài đặt</Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem

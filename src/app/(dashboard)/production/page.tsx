@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -470,9 +471,10 @@ export default function ProductionPage() {
                   const someStarted = req.steps.some((s: { startedAt: string | null }) => s.startedAt);
 
                   return (
-                    <Card key={req.id} className="overflow-hidden">
-                      <CardHeader className="pb-3">
-                        <div className="flex items-center justify-between">
+                    <Link key={req.id} href={`/production/${req.id}`}>
+                      <Card className="overflow-hidden hover:shadow-md transition-shadow cursor-pointer">
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2 flex-wrap">
                             <CardTitle className="text-base font-mono">{req.idea.msku}</CardTitle>
                             {typeBadge(req.type)}
@@ -528,8 +530,9 @@ export default function ProductionPage() {
                             </AlertDialog>
                           </>
                         )}
-                      </CardContent>
-                    </Card>
+                        </CardContent>
+                      </Card>
+                    </Link>
                   );
                 })}
               </div>
