@@ -1,0 +1,206 @@
+"use client";
+
+import { usePathname } from "next/navigation";
+import Link from "next/link";
+import {
+  LayoutDashboard,
+  Lightbulb,
+  Factory,
+  ShoppingCart,
+  Truck,
+  Users,
+  Wrench,
+  Bell,
+  ChevronUp,
+} from "lucide-react";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { signOut, useSession } from "next-auth/react";
+import { roleLabels } from "@/types";
+import type { Role } from "@/lib/permissions";
+
+const navItems = [
+  {
+    title: "Dashboard",
+    href: "/dashboard",
+    icon: LayoutDashboard,
+  },
+  {
+    title: "Ý tưởng",
+    href: "/ideas",
+    icon: Lightbulb,
+  },
+  {
+    title: "Sản xuất",
+    href: "/production",
+    icon: Factory,
+  },
+  {
+    title: "Đơn hàng",
+    href: "/orders",
+    icon: ShoppingCart,
+  },
+  {
+    title: "Shipment",
+    href: "/shipments",
+    icon: Truck,
+  },
+  {
+    title: "Tài khoản",
+    href: "/accounts",
+    icon: Users,
+  },
+  {
+    title: "Tools",
+    href: "/tools",
+    icon: Wrench,
+  },
+];
+
+export function AppSidebar() {
+  const pathname = usePathname();
+  const { data: session } = useSession();
+
+  const user = session?.user;
+  const initials = user?.fullName
+    ?.split(" ")
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "LT";
+
+  return (
+    <Sidebar>
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" asChild>
+              <Link href="/dashboard">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-sm font-bold">
+                  LT
+                </div>
+                <div className="grid flex-1 text-left leading-tight">
+                  <span className="truncate font-semibold">Ligon Team</span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    Quản lý sản phẩm
+                  </span>
+                </div>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarHeader>
+
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>Menu</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {navItems.map((item) => {
+                const isActive =
+                  pathname === item.href ||
+                  (item.href !== "/dashboard" && pathname.startsWith(item.href));
+
+                return (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton asChild isActive={isActive}>
+                      <Link href={item.href}>
+                        <item.icon />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Thông báo</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={pathname === "/notifications"}>
+                  <Link href="/notifications">
+                    <Bell />
+                    <span>Thông báo</span>
+                    <Badge variant="destructive" className="ml-auto text-xs px-1.5 py-0">
+                      0
+                    </Badge>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <SidebarMenuButton
+                  size="lg"
+                  className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                >
+                  <Avatar className="h-8 w-8 rounded-lg">
+                    <AvatarFallback className="rounded-lg text-xs">
+                      {initials}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="grid flex-1 text-left leading-tight">
+                    <span className="truncate font-semibold text-sm">
+                      {user?.fullName || "Ligon User"}
+                    </span>
+                    <span className="truncate text-xs text-muted-foreground">
+                      {user?.role ? roleLabels[user.role as Role] : ""}
+                    </span>
+                  </div>
+                  <ChevronUp className="ml-auto size-4" />
+                </SidebarMenuButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg"
+                side="top"
+                align="end"
+                sideOffset={4}
+              >
+                <DropdownMenuItem asChild>
+                  <Link href="/accounts">Thông tin cá nhân</Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => signOut({ callbackUrl: "/login" })}
+                  className="text-destructive"
+                >
+                  Đăng xuất
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
+    </Sidebar>
+  );
+}
