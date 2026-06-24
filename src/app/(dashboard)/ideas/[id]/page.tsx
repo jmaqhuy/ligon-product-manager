@@ -35,18 +35,21 @@ import {
 import {
   ArrowLeft,
   Check,
+  Download,
   ExternalLink,
   Image as ImageIcon,
   Loader2,
   Save,
   ShieldCheck,
-  PlaySquare,
   AlertTriangle,
   Pencil,
   Edit3,
   XCircle,
   X,
   Trash2,
+  FileText,
+  Upload,
+  ShoppingBag,
 } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
 import { EditableField } from "@/components/editable-field";
@@ -64,10 +67,6 @@ import {
   photoStatusLabels,
   fileStatusLabels,
   listingStatusLabels,
-  type IdeaStatus,
-  type PhotoStatus,
-  type FileStatus,
-  type ListingStatus,
 } from "@/types";
 import type { Role } from "@/lib/permissions";
 import { can } from "@/lib/permissions";
@@ -164,6 +163,8 @@ export default function IdeaDetailPage() {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [sellingAccounts, setSellingAccounts] = useState<any[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [users, setUsers] = useState<any[]>([]);
 
   const fetchIdea = useCallback(async () => {
     try {
@@ -258,10 +259,11 @@ export default function IdeaDetailPage() {
   useEffect(() => {
     fetchIdea();
     fetch("/api/selling-accounts").then((r) => r.json()).then(setSellingAccounts).catch(() => {});
+    fetch("/api/users").then((r) => r.json()).then(setUsers).catch(() => {});
   }, [fetchIdea]);
 
   // ─── Actions ──────────────────────────────────────────────────────
-  const handleReviewAction = async (overrideAction?: "approve" | "reject" | "revise") => {
+  const handleReviewAction = async (overrideAction?: "approve" | "reject" | "revise", requestPhotos?: boolean) => {
     const action = overrideAction || actionType;
     if (!action) return;
     if ((action === "reject" || action === "revise") && !reviewComment.trim()) {
@@ -272,18 +274,24 @@ export default function IdeaDetailPage() {
     setSaving(true);
     try {
       const status = action === "approve" ? "approved" : action === "reject" ? "rejected" : "reviewing";
+      const body: Record<string, unknown> = {
+        status,
+        reviewComment: reviewComment.trim() || undefined,
+        version: idea.version,
+      };
+      // If "Duyệt + Yêu cầu làm ảnh", also set photoStatus
+      if (action === "approve" && requestPhotos) {
+        body.photoStatus = "awaiting_photos";
+      }
+
       const res = await fetch(`/api/ideas/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          status,
-          reviewComment: reviewComment.trim() || undefined,
-          version: idea.version,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (res.ok) {
-        toast.success(`Đã ${action === "approve" ? "duyệt" : action === "reject" ? "từ chối" : "yêu cầu sửa"} ý tưởng!`);
+        toast.success(`Đã ${action === "approve" ? "duyệt" : action === "reject" ? "từ chối" : "yêu cầu sửa"} ý tưởng!${requestPhotos ? " Đã yêu cầu làm ảnh." : ""}`);
         
         // Find next idea in reviewing tab
         if (action === "approve" || action === "reject") {
@@ -603,11 +611,38 @@ export default function IdeaDetailPage() {
                 </DialogContent>
               </Dialog>
 
-              <Button className="bg-green-600 hover:bg-green-700 text-white shadow-sm" onClick={() => handleReviewAction("approve")} disabled={saving}>
-                {saving && actionType === "approve" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
-                Duyệt ý tưởng
+              {/* Two direct approve buttons — no dialog */}
+              <Button
+                variant="outline"
+                className="border-green-300 text-green-700 hover:bg-green-50 hover:text-green-800"
+                onClick={() => handleReviewAction("approve")}
+                disabled={saving}
+              >
+                <ShieldCheck className="mr-2 h-4 w-4" />
+                Duyệt
+              </Button>
+              <Button
+                className="bg-green-600 hover:bg-green-700 text-white shadow-sm"
+                onClick={() => handleReviewAction("approve", true)}
+                disabled={saving}
+              >
+                <ImageIcon className="mr-2 h-4 w-4" />
+                Duyệt + Yêu cầu ảnh
               </Button>
             </div>
+          )}
+
+          {/* Mark as published — shown when photo approved and not yet published */}
+          {canManagePhotos && idea.photoStatus === "approved" && idea.status !== "published" && (
+            <Button
+              variant="outline"
+              className="border-blue-300 text-blue-700 hover:bg-blue-50"
+              onClick={() => handleUpdateIdea({ status: "published" })}
+              disabled={saving}
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              Đánh dấu đã đăng
+            </Button>
           )}
         </div>
       </div>
@@ -725,177 +760,298 @@ export default function IdeaDetailPage() {
                   </div>
                 )}
 
+                {/* Gallery preview — show Amazon/Etsy gallery images if they exist */}
+                {(() => {
+                  let amzGallery: string[] = [];
+                  let etsyGallery: string[] = [];
+                  try { amzGallery = JSON.parse(idea.amazonListing?.galleryImages || "[]").filter(Boolean); } catch {}
+                  try { etsyGallery = JSON.parse(idea.etsyListing?.galleryImages || "[]").filter(Boolean); } catch {}
+                  const hasGallery = amzGallery.length > 0 || etsyGallery.length > 0;
+                  if (!hasGallery) return null;
+                  return (
+                    <div className="space-y-2">
+                      <Separator />
+                      {amzGallery.length > 0 && (
+                        <div>
+                          <p className="text-[10px] text-muted-foreground mb-1">Amazon ({amzGallery.length} ảnh)</p>
+                          <div className="flex gap-1 flex-wrap">
+                            {amzGallery.slice(0, 4).map((url, i) => {
+                              const directUrl = convertToDirectImageUrl(url) || url;
+                              return (
+                              <Dialog key={i}>
+                                <DialogTrigger asChild>
+                                  <div className="w-10 h-10 rounded border overflow-hidden bg-muted cursor-pointer">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img src={directUrl} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                                  </div>
+                                </DialogTrigger>
+                                <DialogContent className="max-w-[95vw] w-fit bg-transparent border-none shadow-none" showCloseButton={false}>
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={directUrl} alt="" className="max-h-[95vh] max-w-[95vw] rounded-md object-contain" />
+                                </DialogContent>
+                              </Dialog>
+                              );
+                            })}
+                            {amzGallery.length > 4 && <span className="text-xs text-muted-foreground self-center">+{amzGallery.length - 4}</span>}
+                          </div>
+                        </div>
+                      )}
+                      {etsyGallery.length > 0 && (
+                        <div>
+                          <p className="text-[10px] text-muted-foreground mb-1">Etsy ({etsyGallery.length} ảnh)</p>
+                          <div className="flex gap-1 flex-wrap">
+                            {etsyGallery.slice(0, 4).map((url, i) => {
+                              const directUrl = convertToDirectImageUrl(url) || url;
+                              return (
+                              <Dialog key={i}>
+                                <DialogTrigger asChild>
+                                  <div className="w-10 h-10 rounded border overflow-hidden bg-muted cursor-pointer">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img src={directUrl} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                                  </div>
+                                </DialogTrigger>
+                                <DialogContent className="max-w-[95vw] w-fit bg-transparent border-none shadow-none" showCloseButton={false}>
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={directUrl} alt="" className="max-h-[95vh] max-w-[95vw] rounded-md object-contain" />
+                                </DialogContent>
+                              </Dialog>
+                              );
+                            })}
+                            {etsyGallery.length > 4 && <span className="text-xs text-muted-foreground self-center">+{etsyGallery.length - 4}</span>}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                <Separator />
+
                 {/* === WORKFLOW ACTIONS === */}
 
-                {/* Step 1: Sếp/QL yêu cầu làm ảnh (khi photo_status = not_requested) */}
+                {/* Sếp/QL yêu cầu làm ảnh */}
                 {canManagePhotos && idea.photoStatus === "not_requested" && (
-                  <Button
-                    size="sm"
-                    className="w-full"
-                    onClick={() => handleUpdateIdea({ photoStatus: "awaiting_photos" })}
-                    disabled={saving}
-                  >
-                    <ImageIcon className="h-4 w-4 mr-2" />
-                    Yêu cầu làm ảnh
+                  <Button size="sm" className="w-full" onClick={() => handleUpdateIdea({ photoStatus: "awaiting_photos" })} disabled={saving}>
+                    <ImageIcon className="h-4 w-4 mr-2" /> Yêu cầu làm ảnh
                   </Button>
                 )}
 
-                {/* Step 2: NV nhận nhiệm vụ (khi awaiting_photos và chưa có ai nhận) */}
+                {/* NV nhận nhiệm vụ */}
                 {idea.photoStatus === "awaiting_photos" && !idea.photoAssigneeId && (
-                  <Button
-                    size="sm"
-                    className="w-full"
-                    variant="default"
-                    onClick={() => handleUpdateIdea({ photoAssigneeId: session?.user?.id })}
-                    disabled={saving}
-                  >
-                    <Check className="h-4 w-4 mr-2" />
-                    Nhận nhiệm vụ làm ảnh
+                  <Button size="sm" className="w-full" onClick={() => handleUpdateIdea({ photoAssigneeId: session?.user?.id })} disabled={saving}>
+                    <Check className="h-4 w-4 mr-2" /> Nhận nhiệm vụ làm ảnh
                   </Button>
                 )}
 
-                {/* Step 2b: NV đã nhận - hiện nút hủy (chỉ người nhận mới thấy) */}
+                {/* NV đã nhận — hiện nút hủy + gallery quick-edit + nộp ảnh */}
                 {idea.photoStatus === "awaiting_photos" && idea.photoAssigneeId === session?.user?.id && (
-                  <Button
-                    size="sm"
-                    className="w-full"
-                    variant="outline"
-                    onClick={() => handleUpdateIdea({ photoAssigneeId: null })}
-                    disabled={saving}
-                  >
-                    <XCircle className="h-4 w-4 mr-2" />
-                    Hủy nhận nhiệm vụ
-                  </Button>
-                )}
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" className="flex-1" onClick={() => handleUpdateIdea({ photoAssigneeId: null })} disabled={saving}>
+                        <XCircle className="h-4 w-4 mr-1" /> Hủy nhận
+                      </Button>
+                    </div>
 
-                {/* Step 2c: Đang chờ - người khác đã nhận (thông báo) */}
-                {idea.photoStatus === "awaiting_photos" && idea.photoAssigneeId && idea.photoAssigneeId !== session?.user?.id && !canManagePhotos && (
-                  <p className="text-xs text-muted-foreground italic">
-                    {idea.photoAssignee?.fullName || "Nhân viên khác"} đã nhận nhiệm vụ này
-                  </p>
-                )}
+                    {/* Quick gallery link edit */}
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px]">Thêm ảnh gallery nhanh (Google Drive link)</Label>
+                      {/* Amazon quick input */}
+                      <div className="flex gap-1">
+                        <Input
+                          className="h-7 text-xs flex-1"
+                          placeholder="Link ảnh Amazon..."
+                          value={amzForm.galleryImages.filter(Boolean).length > 0 ? `${amzForm.galleryImages.filter(Boolean).length} ảnh` : ""}
+                          readOnly
+                        />
+                        <Button size="sm" variant="outline" className="h-7 text-xs shrink-0" onClick={() => { setIsEditingAmz(true); }} disabled={saving}>
+                          <Pencil className="h-3 w-3 mr-1" /> Sửa
+                        </Button>
+                      </div>
+                      {/* Etsy quick input */}
+                      <div className="flex gap-1">
+                        <Input
+                          className="h-7 text-xs flex-1"
+                          placeholder="Link ảnh Etsy..."
+                          value={etsyForm.galleryImages.filter(Boolean).length > 0 ? `${etsyForm.galleryImages.filter(Boolean).length} ảnh` : ""}
+                          readOnly
+                        />
+                        <Button size="sm" variant="outline" className="h-7 text-xs shrink-0" onClick={() => { setIsEditingEtsy(true); }} disabled={saving}>
+                          <Pencil className="h-3 w-3 mr-1" /> Sửa
+                        </Button>
+                      </div>
+                    </div>
 
-                {/* Step 2d: Sếp/QL có thể gỡ assignee nếu cần */}
-                {canManagePhotos && idea.photoStatus === "awaiting_photos" && idea.photoAssigneeId && (
-                  <Button
-                    size="sm"
-                    className="w-full"
-                    variant="ghost"
-                    onClick={() => handleUpdateIdea({ photoAssigneeId: null })}
-                    disabled={saving}
-                  >
-                    <XCircle className="h-4 w-4 mr-2" />
-                    Gỡ người nhận ({idea.photoAssignee?.fullName})
-                  </Button>
-                )}
-
-                {/* Revision requested note */}
-                {idea.photoStatus === "revision_requested" && idea.photoRevisionNote && (
-                  <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 p-2.5 border border-amber-200 dark:border-amber-800">
-                    <p className="text-xs font-medium text-amber-800 dark:text-amber-300 mb-1">Yêu cầu sửa ảnh:</p>
-                    <p className="text-xs text-amber-700 dark:text-amber-400">{idea.photoRevisionNote}</p>
+                    {/* Nộp ảnh buttons — validate gallery images exist */}
+                    <div className="space-y-1.5">
+                      {(() => {
+                        const amzHas = amzForm.galleryImages.filter(Boolean).length > 0;
+                        const etsyHas = etsyForm.galleryImages.filter(Boolean).length > 0;
+                        return (
+                          <>
+                            <Button
+                              size="sm" className="w-full"
+                              onClick={() => {
+                                if (!amzHas) { toast.error("Vui lòng thêm ít nhất 1 ảnh Amazon trước khi nộp!"); return; }
+                                handleSaveAmazon().then(() => handleUpdateIdea({ photoStatus: "pending_approval" }));
+                              }}
+                              disabled={saving}
+                            >
+                              <ShoppingBag className="h-4 w-4 mr-2" /> Nộp ảnh Amazon {amzHas ? `(${amzForm.galleryImages.filter(Boolean).length})` : ""}
+                            </Button>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm" variant="outline" className="flex-1"
+                                onClick={() => {
+                                  if (!etsyHas) { toast.error("Vui lòng thêm ít nhất 1 ảnh Etsy trước khi nộp!"); return; }
+                                  handleSaveEtsy().then(() => handleUpdateIdea({ photoStatus: "pending_approval" }));
+                                }}
+                                disabled={saving}
+                              >
+                                Nộp ảnh Etsy {etsyHas ? `(${etsyForm.galleryImages.filter(Boolean).length})` : ""}
+                              </Button>
+                              <Button
+                                size="sm" variant="default" className="flex-1"
+                                onClick={() => {
+                                  if (!amzHas && !etsyHas) { toast.error("Vui lòng thêm ảnh Amazon hoặc Etsy trước khi nộp!"); return; }
+                                  const promises = [];
+                                  if (amzHas) promises.push(handleSaveAmazon());
+                                  if (etsyHas) promises.push(handleSaveEtsy());
+                                  Promise.all(promises).then(() => handleUpdateIdea({ photoStatus: "pending_approval" }));
+                                }}
+                                disabled={saving}
+                              >
+                                Cả 2
+                              </Button>
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
                   </div>
                 )}
 
-                {/* Step 3: NV nộp ảnh (khi đã nhận nhiệm vụ, status = awaiting_photos) */}
-                {idea.photoStatus === "awaiting_photos" && idea.photoAssigneeId === session?.user?.id && (
-                  <Button
-                    size="sm"
-                    className="w-full"
-                    onClick={() => handleUpdateIdea({ photoStatus: "pending_approval" })}
-                    disabled={saving}
-                  >
-                    <ImageIcon className="h-4 w-4 mr-2" />
-                    Nộp ảnh để duyệt
-                  </Button>
-                )}
-
-                {/* Step 3b: NV nộp lại ảnh (khi revision_requested, chỉ người nhận) */}
+                {/* NV nộp lại ảnh khi bị yêu cầu sửa */}
                 {idea.photoStatus === "revision_requested" && idea.photoAssigneeId === session?.user?.id && (
-                  <Button
-                    size="sm"
-                    className="w-full"
-                    onClick={() => handleUpdateIdea({ photoStatus: "pending_approval" })}
-                    disabled={saving}
-                  >
-                    <ImageIcon className="h-4 w-4 mr-2" />
-                    Nộp lại ảnh đã sửa
+                  <div className="space-y-2">
+                    {idea.photoRevisionNote && (
+                      <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 p-2.5 border border-amber-200 dark:border-amber-800">
+                        <p className="text-xs font-medium text-amber-800 dark:text-amber-300 mb-1">Yêu cầu sửa ảnh:</p>
+                        <p className="text-xs text-amber-700 dark:text-amber-400">{idea.photoRevisionNote}</p>
+                      </div>
+                    )}
+                    <Button size="sm" variant="outline" className="w-full" onClick={() => { setIsEditingAmz(true); }} disabled={saving}>
+                      <Pencil className="h-4 w-4 mr-2" /> Sửa ảnh gallery
+                    </Button>
+                    <Button size="sm" className="w-full" onClick={() => handleUpdateIdea({ photoStatus: "pending_approval" })} disabled={saving}>
+                      <ImageIcon className="h-4 w-4 mr-2" /> Nộp lại ảnh đã sửa
+                    </Button>
+                  </div>
+                )}
+
+                {/* Đang chờ - người khác đã nhận */}
+                {idea.photoStatus === "awaiting_photos" && idea.photoAssigneeId && idea.photoAssigneeId !== session?.user?.id && !canManagePhotos && (
+                  <p className="text-xs text-muted-foreground italic">{idea.photoAssignee?.fullName || "Nhân viên khác"} đã nhận nhiệm vụ này</p>
+                )}
+
+                {/* Sếp/QL gỡ assignee */}
+                {canManagePhotos && idea.photoStatus === "awaiting_photos" && idea.photoAssigneeId && (
+                  <Button size="sm" className="w-full" variant="ghost" onClick={() => handleUpdateIdea({ photoAssigneeId: null })} disabled={saving}>
+                    <XCircle className="h-4 w-4 mr-2" /> Gỡ người nhận ({idea.photoAssignee?.fullName})
                   </Button>
                 )}
 
-                {/* Step 4: Sếp/QL duyệt ảnh (khi pending_approval) */}
+                {/* Sếp/QL duyệt ảnh */}
                 {canManagePhotos && idea.photoStatus === "pending_approval" && (
                   <div className="space-y-2">
-                    <Button
-                      size="sm"
-                      className="w-full bg-green-600 hover:bg-green-700"
-                      onClick={() => handleUpdateIdea({ photoStatus: "approved" })}
-                      disabled={saving}
-                    >
-                      <ShieldCheck className="h-4 w-4 mr-2" />
-                      Duyệt ảnh
+                    <Button size="sm" className="w-full bg-green-600 hover:bg-green-700" onClick={() => handleUpdateIdea({ photoStatus: "approved" })} disabled={saving}>
+                      <ShieldCheck className="h-4 w-4 mr-2" /> Duyệt ảnh
                     </Button>
                     <div className="space-y-1.5">
-                      <Input
-                        value={photoRevisionInput}
-                        onChange={(e) => setPhotoRevisionInput(e.target.value)}
-                        placeholder="Lý do yêu cầu sửa..."
-                        className="h-8 text-xs"
-                      />
-                      <Button
-                        size="sm"
-                        className="w-full"
-                        variant="outline"
-                        onClick={() => {
-                          if (!photoRevisionInput.trim()) {
-                            toast.error("Vui lòng nhập lý do yêu cầu sửa ảnh");
-                            return;
-                          }
-                          handleUpdateIdea({ 
-                            photoStatus: "revision_requested",
-                            photoRevisionNote: photoRevisionInput.trim()
-                          });
-                          setPhotoRevisionInput("");
-                        }}
-                        disabled={saving}
-                      >
-                        <Edit3 className="h-4 w-4 mr-2" />
-                        Yêu cầu sửa ảnh
+                      <Input value={photoRevisionInput} onChange={(e) => setPhotoRevisionInput(e.target.value)} placeholder="Lý do yêu cầu sửa..." className="h-8 text-xs" />
+                      <Button size="sm" className="w-full" variant="outline" onClick={() => {
+                        if (!photoRevisionInput.trim()) { toast.error("Vui lòng nhập lý do yêu cầu sửa ảnh"); return; }
+                        handleUpdateIdea({ photoStatus: "revision_requested", photoRevisionNote: photoRevisionInput.trim() });
+                        setPhotoRevisionInput("");
+                      }} disabled={saving}>
+                        <Edit3 className="h-4 w-4 mr-2" /> Yêu cầu sửa ảnh
                       </Button>
                     </div>
                   </div>
                 )}
 
+                {/* Sếp/QL: Assign photo to specific employee */}
+                {canManagePhotos && (idea.photoStatus === "awaiting_photos" || idea.photoStatus === "revision_requested") && !idea.photoAssigneeId && (
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px]">Giao việc cho nhân viên</Label>
+                    <Select value="" onValueChange={(v) => handleUpdateIdea({ photoAssigneeId: v })}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Chọn nhân viên..." /></SelectTrigger>
+                      <SelectContent>
+                        {users.filter((u: any) => u.status === "active" && u.role === "employee").map((u: any) => (
+                          <SelectItem key={u.id} value={u.id}>{u.fullName}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
                 <Separator />
 
-                {/* File Status - only admin */}
+                {/* File Management */}
                 {canManagePhotos && (
                   <>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Trạng thái file sản xuất</Label>
-                      <Select
-                        value={idea.fileStatus}
-                        onValueChange={(v) => handleUpdateIdea({ fileStatus: v })}
-                      >
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(fileStatusLabels).map(([k, v]) => (
-                            <SelectItem key={k} value={k}>{v}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-muted-foreground">Trạng thái file</span>
+                      {statusBadge(idea.fileStatus, fileStatusLabels)}
                     </div>
                     <div className="space-y-1.5">
+                      <Label className="text-xs">Link file sản xuất</Label>
+                      {idea.productionFileUrl ? (
+                        <a href={idea.productionFileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                          <ExternalLink className="h-3 w-3" /> Mở file sản xuất
+                        </a>
+                      ) : (
+                        <p className="text-xs text-muted-foreground italic">Chưa có link file</p>
+                      )}
+                    </div>
+                    {idea.fileStatus === "not_started" && (
+                      <Button size="sm" className="w-full" variant="outline" onClick={() => handleUpdateIdea({ fileStatus: "in_progress" })} disabled={saving}>
+                        <FileText className="h-4 w-4 mr-2" /> Yêu cầu làm file SX
+                      </Button>
+                    )}
+                    {idea.fileStatus === "in_progress" && (
+                      <Button size="sm" className="w-full" onClick={() => {
+                        if (!idea.productionFileUrl) { toast.error("Vui lòng thêm link file sản xuất trước khi nộp!"); return; }
+                        handleUpdateIdea({ fileStatus: "pending_review" });
+                      }} disabled={saving}>
+                        <FileText className="h-4 w-4 mr-2" /> Nộp file để duyệt
+                      </Button>
+                    )}
+                    {idea.fileStatus === "pending_review" && (
+                      <div className="space-y-2">
+                        <Button size="sm" className="w-full bg-green-600 hover:bg-green-700" onClick={() => {
+                          if (!idea.productionFileUrl) { toast.error("Chưa có link file sản xuất để duyệt!"); return; }
+                          handleUpdateIdea({ fileStatus: "approved" });
+                        }} disabled={saving}>
+                          <ShieldCheck className="h-4 w-4 mr-2" /> Duyệt file
+                        </Button>
+                        <Button size="sm" className="w-full" variant="outline" onClick={() => handleUpdateIdea({ fileStatus: "revision_requested" })} disabled={saving}>
+                          <Edit3 className="h-4 w-4 mr-2" /> Yêu cầu sửa file
+                        </Button>
+                      </div>
+                    )}
+                    {idea.fileStatus === "revision_requested" && (
+                      <Button size="sm" className="w-full" onClick={() => {
+                        if (!idea.productionFileUrl) { toast.error("Vui lòng thêm link file sản xuất trước khi nộp!"); return; }
+                        handleUpdateIdea({ fileStatus: "pending_review" });
+                      }} disabled={saving}>
+                        <FileText className="h-4 w-4 mr-2" /> Nộp lại file đã sửa
+                      </Button>
+                    )}
+                    <Separator />
+                    <div className="space-y-1.5">
                       <Label className="text-xs">Loại Fulfillment</Label>
-                      <Select
-                        value={idea.fulfillmentType}
-                        onValueChange={(v) => handleUpdateIdea({ fulfillmentType: v })}
-                      >
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
+                      <Select value={idea.fulfillmentType} onValueChange={(v) => handleUpdateIdea({ fulfillmentType: v })}>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="FBA">FBA</SelectItem>
                           <SelectItem value="FBM">FBM</SelectItem>
@@ -1018,9 +1174,33 @@ export default function IdeaDetailPage() {
                   </div>
                   <div>
                     {!isEditingAmz ? (
-                      <Button variant="ghost" size="sm" onClick={() => setIsEditingAmz(true)}>
-                        <Pencil className="h-4 w-4 mr-2" /> Chỉnh sửa
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        {/* Download gallery button */}
+                        {idea.amazonListing && (() => {
+                          try {
+                            const gallery = JSON.parse(idea.amazonListing.galleryImages || "[]");
+                            if (gallery.length > 0) {
+                              return (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    const urls = gallery.map((g: string) => convertToDirectImageUrl(g));
+                                    urls.forEach((url: string) => window.open(url, "_blank"));
+                                  }}
+                                >
+                                  <Download className="h-4 w-4 mr-2" />
+                                  Tải bộ ảnh ({gallery.length})
+                                </Button>
+                              );
+                            }
+                          } catch {}
+                          return null;
+                        })()}
+                        <Button variant="ghost" size="sm" onClick={() => setIsEditingAmz(true)}>
+                          <Pencil className="h-4 w-4 mr-2" /> Chỉnh sửa
+                        </Button>
+                      </div>
                     ) : (
                       <div className="flex items-center gap-2">
                         <Button variant="outline" size="sm" onClick={() => setIsEditingAmz(false)}>
@@ -1247,9 +1427,33 @@ export default function IdeaDetailPage() {
                   </div>
                   <div>
                     {!isEditingEtsy ? (
-                      <Button variant="ghost" size="sm" onClick={() => setIsEditingEtsy(true)}>
-                        <Pencil className="h-4 w-4 mr-2" /> Chỉnh sửa
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        {/* Download gallery button for Etsy */}
+                        {idea.etsyListing && (() => {
+                          try {
+                            const gallery = JSON.parse(idea.etsyListing.galleryImages || "[]");
+                            if (gallery.length > 0) {
+                              return (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    const urls = gallery.map((g: string) => convertToDirectImageUrl(g));
+                                    urls.forEach((url: string) => window.open(url, "_blank"));
+                                  }}
+                                >
+                                  <Download className="h-4 w-4 mr-2" />
+                                  Tải bộ ảnh ({gallery.length})
+                                </Button>
+                              );
+                            }
+                          } catch {}
+                          return null;
+                        })()}
+                        <Button variant="ghost" size="sm" onClick={() => setIsEditingEtsy(true)}>
+                          <Pencil className="h-4 w-4 mr-2" /> Chỉnh sửa
+                        </Button>
+                      </div>
                     ) : (
                       <div className="flex items-center gap-2">
                         <Button variant="outline" size="sm" onClick={() => setIsEditingEtsy(false)}>

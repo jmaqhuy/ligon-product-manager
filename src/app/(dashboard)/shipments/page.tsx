@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +20,7 @@ import {
   Package,
   Truck,
   ExternalLink,
+  Plus,
 } from "lucide-react";
 
 export default function ShipmentsPage() {
@@ -52,6 +54,11 @@ export default function ShipmentsPage() {
             Quản lý thùng hàng và vận chuyển FBA
           </p>
         </div>
+        <Button asChild>
+          <Link href="/shipments/new">
+            <Plus className="mr-2 h-4 w-4" /> Tạo Shipment
+          </Link>
+        </Button>
       </div>
 
       <div className="flex items-center gap-3">

@@ -50,8 +50,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return null;
         }
 
+        const email = credentials.email as string;
         const user = await db.user.findUnique({
-          where: { email: credentials.email as string },
+          where: { email },
         });
 
         if (!user) return null;
@@ -61,11 +62,52 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           throw new Error("Tài khoản đã bị vô hiệu hoá");
         }
 
+        // Rate limiting: check recent failed attempts (last 15 min)
+        const fifteenMinAgo = new Date(Date.now() - 15 * 60 * 1000);
+        const recentAttempts = await db.auditLog.count({
+          where: {
+            entityType: "login_attempt",
+            fieldName: email,
+            changedAt: { gte: fifteenMinAgo },
+            oldValue: "failed",
+          },
+        });
+
+        if (recentAttempts >= 5) {
+          throw new Error("Quá nhiều lần đăng nhập sai. Vui lòng thử lại sau 15 phút.");
+        }
+
         const isValid = await compare(
           credentials.password as string,
           user.passwordHash
         );
-        if (!isValid) return null;
+        
+        if (!isValid) {
+          // Log failed attempt
+          await db.auditLog.create({
+            data: {
+              entityType: "login_attempt",
+              entityId: user.id,
+              fieldName: email,
+              oldValue: "failed",
+              newValue: String(recentAttempts + 1),
+              changedById: user.id,
+            },
+          });
+          return null;
+        }
+
+        // Log successful login
+        await db.auditLog.create({
+          data: {
+            entityType: "login_attempt",
+            entityId: user.id,
+            fieldName: email,
+            oldValue: "success",
+            newValue: null,
+            changedById: user.id,
+          },
+        });
 
         return {
           id: user.id,

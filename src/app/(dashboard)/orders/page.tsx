@@ -28,6 +28,7 @@ import {
   Package,
   Factory,
   Eye,
+  Plus,
 } from "lucide-react";
 import Link from "next/link";
 import { orderProductionStatusLabels, type OrderProductionStatus } from "@/types";
@@ -199,6 +200,11 @@ export default function OrdersPage() {
             Quản lý đơn hàng FBM, Etsy, và Personalize
           </p>
         </div>
+        <Button asChild>
+          <Link href="/orders/new">
+            <Plus className="mr-2 h-4 w-4" /> Tạo đơn hàng
+          </Link>
+        </Button>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">

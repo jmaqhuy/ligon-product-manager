@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +18,13 @@ import {
 } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Plus,
   Search,
@@ -38,6 +46,7 @@ import {
   type PhotoStatus,
   type FulfillmentType,
 } from "@/types";
+import type { Role } from "@/lib/permissions";
 import { convertToDirectImageUrl } from "@/lib/google-drive";
 
 // Status badge colors
@@ -205,11 +214,37 @@ function IdeaTable({ ideas, loading }: { ideas: IdeaRow[]; loading: boolean }) {
 }
 
 export default function IdeasPage() {
+  const { data: session } = useSession();
+  const searchParams = useSearchParams();
+  const role = session?.user?.role as Role | undefined;
+  const isEmployee = role === "employee";
+
+  const urlTab = searchParams.get("tab") || "reviewing";
   const [search, setSearch] = useState("");
-  const [showMine, setShowMine] = useState(false);
-  const [activeTab, setActiveTab] = useState("reviewing");
+  const [showMine, setShowMine] = useState(isEmployee);
+  const [activeTab, setActiveTab] = useState(urlTab);
   const [ideas, setIdeas] = useState<IdeaRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [topicId, setTopicId] = useState("");
+  const [month, setMonth] = useState("");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [topics, setTopics] = useState<any[]>([]);
+
+  // Fetch topics for filter
+  useEffect(() => {
+    fetch("/api/topics").then(r => r.json()).then(setTopics).catch(() => {});
+  }, []);
+
+  // Sync URL tab param when it changes
+  useEffect(() => {
+    const newTab = searchParams.get("tab") || "reviewing";
+    setActiveTab(newTab);
+  }, [searchParams]);
+
+  // Sync showMine with role changes
+  useEffect(() => {
+    setShowMine(isEmployee);
+  }, [isEmployee]);
 
   const fetchIdeas = useCallback(async () => {
     setLoading(true);
@@ -217,6 +252,8 @@ export default function IdeasPage() {
       const params = new URLSearchParams({ tab: activeTab });
       if (search) params.set("search", search);
       if (showMine) params.set("mine", "true");
+      if (topicId) params.set("topicId", topicId);
+      if (month) params.set("month", month);
 
       const res = await fetch(`/api/ideas?${params.toString()}`);
       if (res.ok) {
@@ -228,7 +265,7 @@ export default function IdeasPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, search, showMine]);
+  }, [activeTab, search, showMine, topicId, month]);
 
   useEffect(() => {
     fetchIdeas();
@@ -276,6 +313,25 @@ export default function IdeasPage() {
             className="pl-8"
           />
         </div>
+
+        <Select value={topicId} onValueChange={setTopicId}>
+          <SelectTrigger className="w-[150px] h-9 text-xs">
+            <SelectValue placeholder="Chủ đề" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tất cả chủ đề</SelectItem>
+            {topics.map((t: any) => (
+              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Input
+          type="month"
+          value={month}
+          onChange={(e) => setMonth(e.target.value)}
+          className="w-[160px] h-9 text-xs"
+        />
 
         <div className="flex items-center gap-2 ml-auto">
           <Switch

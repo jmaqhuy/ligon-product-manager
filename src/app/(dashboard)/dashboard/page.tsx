@@ -6,6 +6,8 @@ import { Lightbulb, Image, CheckCircle, Upload, Factory, ShoppingCart, Bell } fr
 import Link from "next/link";
 import { can, type Role } from "@/lib/permissions";
 import { DashboardCharts } from "./charts";
+import { EmployeeMonthlyStats } from "./employee-monthly-stats";
+import { SourceLinkStats } from "./source-link-stats";
 
 async function getStats(userId: string, role: Role) {
   const isAdmin = can(role, "view_all_stats");
@@ -168,6 +170,12 @@ export default async function DashboardPage() {
 
       {/* Monthly Charts (client component) */}
       <DashboardCharts />
+
+      {/* Employee Monthly Stats (client component) */}
+      <EmployeeMonthlyStats />
+
+      {/* Source Link Stats (client component) */}
+      <SourceLinkStats />
 
       {/* Recent Activity */}
       <div className="grid gap-4 md:grid-cols-2">

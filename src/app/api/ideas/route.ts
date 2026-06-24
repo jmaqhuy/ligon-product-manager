@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get("search") || "";
     const mine = searchParams.get("mine") === "true";
     const topicId = searchParams.get("topicId");
+    const month = searchParams.get("month");
 
     // Build where clause based on tab
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -38,6 +39,15 @@ export async function GET(req: NextRequest) {
 
     if (topicId) {
       where.AND.push({ topicId });
+    }
+
+    if (month) {
+      const [year, mon] = month.split("-");
+      const start = new Date(parseInt(year), parseInt(mon) - 1, 1);
+      const end = new Date(parseInt(year), parseInt(mon), 0, 23, 59, 59);
+      where.AND.push({
+        createdAt: { gte: start, lte: end },
+      });
     }
 
     switch (tab) {

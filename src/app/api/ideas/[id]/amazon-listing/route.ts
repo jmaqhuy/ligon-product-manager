@@ -40,7 +40,24 @@ export async function PUT(
       contentAPlusUrl,
       listingStatus,
       listingStatusReason,
+      version,
     } = body;
+
+    // Check existing listing for optimistic locking
+    const existing = await db.amazonListing.findUnique({ where: { ideaId: id } });
+    if (existing && version !== undefined && version !== existing.version) {
+      return NextResponse.json(
+        { error: "Dữ liệu Amazon đã được cập nhật bởi người khác. Vui lòng tải lại trang." },
+        { status: 409 }
+      );
+    }
+
+    // Track audit changes
+    const auditEntries: { field: string; oldVal: string | null; newVal: string | null }[] = [];
+    if (existing) {
+      if (asin !== undefined && asin !== existing.asin) auditEntries.push({ field: "asin", oldVal: existing.asin, newVal: asin });
+      if (listingStatus !== undefined && listingStatus !== existing.listingStatus) auditEntries.push({ field: "listingStatus", oldVal: existing.listingStatus, newVal: listingStatus });
+    }
 
     const listing = await db.amazonListing.upsert({
       where: { ideaId: id },
@@ -85,6 +102,20 @@ export async function PUT(
         listingStatusReason: (listingStatus === "error" || listingStatus === "delisted") ? listingStatusReason : null,
       },
     });
+
+    // Create audit logs for Amazon listing changes
+    for (const entry of auditEntries) {
+      await db.auditLog.create({
+        data: {
+          entityType: "amazon_listing",
+          entityId: listing.id,
+          fieldName: entry.field,
+          oldValue: entry.oldVal,
+          newValue: entry.newVal,
+          changedById: session.user.id,
+        },
+      });
+    }
 
     return NextResponse.json(listing);
   } catch (error) {

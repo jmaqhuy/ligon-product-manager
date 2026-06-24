@@ -51,6 +51,7 @@ export async function GET(req: NextRequest) {
             mainImageUrl: true,
             title: true,
             fulfillmentType: true,
+            productionFileUrl: true,
           },
         },
         steps: {

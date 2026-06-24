@@ -222,20 +222,74 @@ export async function PATCH(
       }
     }
 
-    // 2. Notify creator if photo requested
-    if (body.photoStatus === "request_photo" && idea.photoStatus !== "request_photo" && session.user.id !== idea.createdById) {
+    // 2. Notify creator if photo status changed to "awaiting_photos"
+    if (body.photoStatus === "awaiting_photos" && idea.photoStatus !== "awaiting_photos" && session.user.id !== idea.createdById) {
       await db.notification.create({
         data: {
           userId: idea.createdById,
           type: "photo_requested",
           category: "photo",
-          message: `Sếp/Quản lý đã yêu cầu làm ảnh và file thiết kế cho ý tưởng ${idea.msku}.`,
+          message: `Sếp/Quản lý đã yêu cầu làm ảnh cho ý tưởng ${idea.msku}.`,
           actionUrl: `/ideas/${idea.id}`
         }
       });
       broadcastNotification([idea.createdById], {
         type: "photo_requested",
-        message: `Sếp/Quản lý đã yêu cầu làm ảnh và file thiết kế cho ý tưởng ${idea.msku}.`,
+        message: `Sếp/Quản lý đã yêu cầu làm ảnh cho ý tưởng ${idea.msku}.`,
+        actionUrl: `/ideas/${idea.id}`
+      });
+    }
+
+    // 2b. Notify assigned employee when photo task is assigned
+    if (body.photoAssigneeId && body.photoAssigneeId !== idea.photoAssigneeId && body.photoAssigneeId !== session.user.id) {
+      await db.notification.create({
+        data: {
+          userId: body.photoAssigneeId,
+          type: "photo_assigned",
+          category: "photo",
+          message: `Bạn được giao làm ảnh cho ý tưởng ${idea.msku}.`,
+          actionUrl: `/ideas/${idea.id}`
+        }
+      });
+      broadcastNotification([body.photoAssigneeId], {
+        type: "photo_assigned",
+        message: `Bạn được giao làm ảnh cho ý tưởng ${idea.msku}.`,
+        actionUrl: `/ideas/${idea.id}`
+      });
+    }
+
+    // 2c. Notify employee when photos are approved
+    if (body.photoStatus === "approved" && idea.photoStatus !== "approved" && idea.photoAssigneeId) {
+      await db.notification.create({
+        data: {
+          userId: idea.photoAssigneeId,
+          type: "photo_approved",
+          category: "photo",
+          message: `Ảnh của ý tưởng ${idea.msku} đã được duyệt! Sẵn sàng đăng bán.`,
+          actionUrl: `/ideas/${idea.id}`
+        }
+      });
+      broadcastNotification([idea.photoAssigneeId], {
+        type: "photo_approved",
+        message: `Ảnh của ý tưởng ${idea.msku} đã được duyệt!`,
+        actionUrl: `/ideas/${idea.id}`
+      });
+    }
+
+    // 2d. Notify employee when photos need revision
+    if (body.photoStatus === "revision_requested" && idea.photoStatus !== "revision_requested" && idea.photoAssigneeId) {
+      await db.notification.create({
+        data: {
+          userId: idea.photoAssigneeId,
+          type: "photo_revision_requested",
+          category: "photo",
+          message: `Ảnh của ý tưởng ${idea.msku} cần được chỉnh sửa. Lý do: ${body.photoRevisionNote || "Không có"}`,
+          actionUrl: `/ideas/${idea.id}`
+        }
+      });
+      broadcastNotification([idea.photoAssigneeId], {
+        type: "photo_revision_requested",
+        message: `Ảnh của ý tưởng ${idea.msku} cần được chỉnh sửa.`,
         actionUrl: `/ideas/${idea.id}`
       });
     }

@@ -46,11 +46,15 @@ import {
   Plus,
   Search,
   Package,
+  ExternalLink,
+  Image as ImageIcon,
+  FileText,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { can, type Role } from "@/lib/permissions";
 import { productionPriorityLabels, type ProductionPriority } from "@/types";
+import { convertToDirectImageUrl } from "@/lib/google-drive";
 
 // ─── Priority badge ────────────────────────────────────────────────
 function priorityBadge(priority: string) {
@@ -469,19 +473,60 @@ export default function ProductionPage() {
                 {requests.map((req) => {
                   const allStepsFinished = req.steps.every((s: { finishedAt: string | null }) => s.finishedAt);
                   const someStarted = req.steps.some((s: { startedAt: string | null }) => s.startedAt);
+                  const thumbUrl = convertToDirectImageUrl(req.idea.mainImageUrl);
 
                   return (
-                    <Link key={req.id} href={`/production/${req.id}`}>
-                      <Card className="overflow-hidden hover:shadow-md transition-shadow cursor-pointer">
-                        <CardHeader className="pb-3">
-                          <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <CardTitle className="text-base font-mono">{req.idea.msku}</CardTitle>
-                            {typeBadge(req.type)}
-                            {priorityBadge(req.priority)}
-                            <Badge variant="outline" className="text-[10px]">{req.idea.fulfillmentType}</Badge>
+                    <Card key={req.id} className="overflow-hidden hover:shadow-md transition-shadow">
+                      <CardHeader className="pb-3">
+                        <div className="flex items-start gap-3">
+                          {/* Thumbnail */}
+                          <Link href={`/ideas/${req.idea.id}`} className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                            {thumbUrl ? (
+                              <div className="w-14 h-14 rounded border overflow-hidden bg-muted">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={thumbUrl} alt={req.idea.msku} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                              </div>
+                            ) : (
+                              <div className="w-14 h-14 rounded border border-dashed border-muted-foreground/30 bg-muted flex items-center justify-center">
+                                <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                              </div>
+                            )}
+                          </Link>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Link href={`/ideas/${req.idea.id}`} className="hover:underline" onClick={(e) => e.stopPropagation()}>
+                                <CardTitle className="text-base font-mono">{req.idea.msku}</CardTitle>
+                              </Link>
+                              {typeBadge(req.type)}
+                              {priorityBadge(req.priority)}
+                              <Badge variant="outline" className="text-[10px]">{req.idea.fulfillmentType}</Badge>
+                            </div>
+                            {req.idea.title && (
+                              <p className="text-sm text-muted-foreground truncate mt-0.5">{req.idea.title}</p>
+                            )}
+                            {/* Production file link */}
+                            <div className="flex items-center gap-3 mt-1.5 text-xs">
+                              {req.idea.productionFileUrl ? (
+                                <a
+                                  href={req.idea.productionFileUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1 text-blue-600 hover:underline"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <FileText className="h-3 w-3" /> File sản xuất
+                                  <ExternalLink className="h-2.5 w-2.5" />
+                                </a>
+                              ) : (
+                                <span className="text-muted-foreground italic flex items-center gap-1">
+                                  <FileText className="h-3 w-3" /> Chưa có file SX
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground shrink-0">
                             <span>SL: <strong className="text-foreground">{req.requestedQty}</strong></span>
                             {req.completedAt && (
                               <span className="text-green-600 dark:text-green-400 font-medium">
@@ -490,11 +535,8 @@ export default function ProductionPage() {
                             )}
                           </div>
                         </div>
-                        {req.idea.title && (
-                          <p className="text-sm text-muted-foreground truncate">{req.idea.title}</p>
-                        )}
                         {req.noteForWorkers && (
-                          <p className="text-xs bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 px-2 py-1 rounded mt-1">
+                          <p className="text-xs bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 px-2 py-1 rounded mt-2">
                             📝 {req.noteForWorkers}
                           </p>
                         )}
@@ -532,7 +574,6 @@ export default function ProductionPage() {
                         )}
                         </CardContent>
                       </Card>
-                    </Link>
                   );
                 })}
               </div>
