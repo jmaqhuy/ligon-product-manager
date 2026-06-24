@@ -39,6 +39,7 @@ export async function PUT(
       videoUrl,
       contentAPlusUrl,
       listingStatus,
+      listingStatusReason,
     } = body;
 
     const listing = await db.amazonListing.upsert({
@@ -60,6 +61,7 @@ export async function PUT(
         videoUrl,
         contentAPlusUrl,
         listingStatus,
+        listingStatusReason: (listingStatus === "error" || listingStatus === "delisted") ? listingStatusReason : null,
         version: { increment: 1 },
       },
       create: {
@@ -79,7 +81,8 @@ export async function PUT(
         galleryImages: galleryImages ? JSON.stringify(galleryImages) : "[]",
         videoUrl,
         contentAPlusUrl,
-        listingStatus: listingStatus || "pending_review",
+        listingStatus: listingStatus || "ready",
+        listingStatusReason: (listingStatus === "error" || listingStatus === "delisted") ? listingStatusReason : null,
       },
     });
 

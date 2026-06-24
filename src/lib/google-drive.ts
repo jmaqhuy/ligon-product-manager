@@ -90,6 +90,17 @@ export function stripQueryString(url: string): string {
 }
 
 /**
+ * Convert Google Drive link to direct download URL
+ */
+export function driveToDownloadUrl(url: string): string {
+  if (!url) return url;
+  if (!isDriveLink(url)) return url;
+  const fileId = extractDriveFileId(url);
+  if (!fileId) return url;
+  return `https://drive.google.com/uc?export=download&id=${fileId}`;
+}
+
+/**
  * Alias for driveToPreviewUrl — used in UI components to show Drive images
  */
 export function convertToDirectImageUrl(url: string): string | null {

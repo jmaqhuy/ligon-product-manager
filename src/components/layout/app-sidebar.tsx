@@ -33,11 +33,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { signOut, useSession } from "next-auth/react";
 import { roleLabels } from "@/types";
 import type { Role } from "@/lib/permissions";
+import { useSocket } from "@/components/providers/socket-provider";
 
 const navItems = [
   {
@@ -85,14 +86,10 @@ const navItems = [
 export function AppSidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const { unreadCount } = useSocket();
 
   const user = session?.user;
-  const initials = user?.fullName
-    ?.split(" ")
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase() || "LT";
+  const initials = user?.nameAbbreviation || "LT";
 
   return (
     <Sidebar>
@@ -150,9 +147,11 @@ export function AppSidebar() {
                   <Link href="/notifications">
                     <Bell />
                     <span>Thông báo</span>
-                    <Badge variant="destructive" className="ml-auto text-xs px-1.5 py-0">
-                      0
-                    </Badge>
+                    {unreadCount > 0 && (
+                      <Badge variant="destructive" className="ml-auto text-xs px-1.5 py-0">
+                        {unreadCount > 9 ? "9+" : unreadCount}
+                      </Badge>
+                    )}
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -171,6 +170,7 @@ export function AppSidebar() {
                   className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                 >
                   <Avatar className="h-8 w-8 rounded-lg">
+                    <AvatarImage src={user?.avatarUrl || undefined} />
                     <AvatarFallback className="rounded-lg text-xs">
                       {initials}
                     </AvatarFallback>

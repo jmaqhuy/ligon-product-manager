@@ -10,6 +10,8 @@ declare module "next-auth" {
     fullName: string;
     nameAbbreviation: string;
     status: string;
+    avatarUrl?: string | null;
+    notificationSettings?: string | null;
   }
   interface Session {
     user: {
@@ -18,6 +20,8 @@ declare module "next-auth" {
       role: Role;
       fullName: string;
       nameAbbreviation: string;
+      avatarUrl?: string | null;
+      notificationSettings?: string | null;
     };
   }
 }
@@ -28,6 +32,8 @@ declare module "@auth/core/jwt" {
     role: Role;
     fullName: string;
     nameAbbreviation: string;
+    avatarUrl?: string | null;
+    notificationSettings?: string | null;
   }
 }
 
@@ -68,6 +74,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           fullName: user.fullName,
           nameAbbreviation: user.nameAbbreviation,
           status: user.status,
+          avatarUrl: user.avatarUrl,
+          notificationSettings: user.notificationSettings,
         };
       },
     }),
@@ -79,14 +87,20 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.role = user.role;
         token.fullName = user.fullName;
         token.nameAbbreviation = user.nameAbbreviation;
+        token.avatarUrl = user.avatarUrl;
+        token.notificationSettings = user.notificationSettings;
       }
       return token;
     },
     async session({ session, token }) {
-      session.user.id = token.id;
-      session.user.role = token.role;
-      session.user.fullName = token.fullName;
-      session.user.nameAbbreviation = token.nameAbbreviation;
+      if (token) {
+        session.user.id = token.id;
+        session.user.role = token.role;
+        session.user.fullName = token.fullName;
+        session.user.nameAbbreviation = token.nameAbbreviation;
+        session.user.avatarUrl = token.avatarUrl;
+        session.user.notificationSettings = token.notificationSettings;
+      }
       return session;
     },
   },

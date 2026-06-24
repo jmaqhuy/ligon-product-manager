@@ -24,6 +24,14 @@ import {
   Loader2,
 } from "lucide-react";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { CopyButton } from "@/components/copy-button";
+import {
   ideaStatusLabels,
   photoStatusLabels,
   type IdeaStatus,
@@ -38,8 +46,9 @@ function getStatusBadge(status: IdeaStatus) {
     reviewing: { className: "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300", label: ideaStatusLabels.reviewing },
     approved: { className: "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300", label: ideaStatusLabels.approved },
     published: { className: "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300", label: ideaStatusLabels.published },
+    rejected: { className: "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300", label: ideaStatusLabels.rejected },
   };
-  const v = variants[status];
+  const v = variants[status] || { className: "bg-gray-100 text-gray-800", label: status };
   return <Badge variant="outline" className={v.className}>{v.label}</Badge>;
 }
 
@@ -74,6 +83,7 @@ interface IdeaRow {
   createdByName: string;
   createdAt: string;
   title: string | null;
+  needsReReview: boolean;
 }
 
 function IdeaTable({ ideas, loading }: { ideas: IdeaRow[]; loading: boolean }) {
@@ -122,36 +132,65 @@ function IdeaTable({ ideas, loading }: { ideas: IdeaRow[]; loading: boolean }) {
             return (
               <TableRow
                 key={idea.id}
-                className="cursor-pointer hover:bg-muted/50"
+                className="cursor-pointer hover:bg-muted/50 group/row"
                 onClick={() => router.push(`/ideas/${idea.id}`)}
               >
                 <TableCell>
-                  <div className="w-10 h-10 rounded border border-dashed border-muted-foreground/30 overflow-hidden bg-muted flex items-center justify-center">
-                    {thumbUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={thumbUrl}
-                        alt={idea.msku}
-                        className="w-full h-full object-cover"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                      />
-                    ) : (
+                  {thumbUrl ? (
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <div
+                          className="w-10 h-10 rounded border border-dashed border-muted-foreground/30 overflow-hidden bg-muted flex items-center justify-center cursor-pointer group/img"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={thumbUrl}
+                            alt={idea.msku}
+                            className="w-full h-full object-cover transition-transform duration-300 group-hover/img:scale-125"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                          />
+                        </div>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-[95vw] w-fit bg-transparent border-none shadow-none" showCloseButton={false} onClick={(e) => e.stopPropagation()}>
+                        <div className="relative flex justify-center items-center p-0">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={thumbUrl} alt="Full view" className="max-h-[95vh] max-w-[95vw] w-auto h-auto rounded-md object-contain" />
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  ) : (
+                    <div className="w-10 h-10 rounded border border-dashed border-muted-foreground/30 overflow-hidden bg-muted flex items-center justify-center">
                       <span className="text-xs text-muted-foreground">N/A</span>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </TableCell>
                 <TableCell>
-                  <div>
-                    <span className="font-mono text-sm font-medium">{idea.msku}</span>
-                    {idea.title && (
-                      <p className="text-xs text-muted-foreground truncate max-w-[200px]">{idea.title}</p>
-                    )}
+                  <div className="flex items-center gap-2">
+                    <div className="min-w-0">
+                      <span className="font-mono text-sm font-medium">{idea.msku}</span>
+                      {idea.title && (
+                        <p className="text-xs text-muted-foreground truncate max-w-[200px]">{idea.title}</p>
+                      )}
+                    </div>
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <CopyButton text={idea.msku} className="h-6 w-6 opacity-0 group-hover/row:opacity-100 transition-opacity" />
+                    </div>
                   </div>
                 </TableCell>
                 <TableCell className="text-sm hidden md:table-cell">{idea.topicName}</TableCell>
                 <TableCell className="text-sm hidden lg:table-cell">{idea.createdByName}</TableCell>
                 <TableCell>{getFulfillmentBadge(idea.fulfillmentType)}</TableCell>
-                <TableCell>{getStatusBadge(idea.status)}</TableCell>
+                <TableCell>
+                  <div className="flex flex-col items-start gap-1">
+                    {getStatusBadge(idea.status)}
+                    {idea.needsReReview && (
+                      <Badge variant="destructive" className="bg-red-500 text-white animate-pulse text-[10px] px-1 py-0 h-4">
+                        Sửa đổi mới
+                      </Badge>
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell className="hidden md:table-cell">{getPhotoStatusBadge(idea.photoStatus)}</TableCell>
                 <TableCell className="text-sm text-muted-foreground hidden sm:table-cell">
                   {new Date(idea.createdAt).toLocaleDateString("vi-VN")}
@@ -198,7 +237,11 @@ export default function IdeasPage() {
   // Debounced search
   useEffect(() => {
     const timer = setTimeout(() => {
-      fetchIdeas();
+      if (search && activeTab !== "all") {
+        setActiveTab("all");
+      } else {
+        fetchIdeas();
+      }
     }, 300);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -248,20 +291,30 @@ export default function IdeasPage() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="reviewing" className="text-xs sm:text-sm">
+        <TabsList className="flex w-full overflow-x-auto justify-start border-b rounded-none h-auto p-0 bg-transparent">
+          <TabsTrigger value="all" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2">
+            Tất cả
+          </TabsTrigger>
+          <TabsTrigger value="reviewing" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2">
             Chờ xem xét
           </TabsTrigger>
-          <TabsTrigger value="photos" className="text-xs sm:text-sm">
+          <TabsTrigger value="photos" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2">
             Chờ làm ảnh
           </TabsTrigger>
-          <TabsTrigger value="ready" className="text-xs sm:text-sm">
+          <TabsTrigger value="ready" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2">
             Sẵn sàng đăng
           </TabsTrigger>
-          <TabsTrigger value="published" className="text-xs sm:text-sm">
+          <TabsTrigger value="published" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2">
             Đã đăng bán
           </TabsTrigger>
+          <TabsTrigger value="rejected" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2">
+            Đã bị từ chối
+          </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="all" className="mt-4">
+          <IdeaTable ideas={ideas} loading={loading} />
+        </TabsContent>
 
         <TabsContent value="reviewing" className="mt-4">
           <IdeaTable ideas={ideas} loading={loading} />
@@ -273,6 +326,9 @@ export default function IdeasPage() {
           <IdeaTable ideas={ideas} loading={loading} />
         </TabsContent>
         <TabsContent value="published" className="mt-4">
+          <IdeaTable ideas={ideas} loading={loading} />
+        </TabsContent>
+        <TabsContent value="rejected" className="mt-4">
           <IdeaTable ideas={ideas} loading={loading} />
         </TabsContent>
       </Tabs>

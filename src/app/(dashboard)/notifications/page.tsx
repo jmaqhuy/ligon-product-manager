@@ -93,19 +93,7 @@ export default function NotificationsPage() {
     }
   };
 
-  const markAsCompleted = async (id: string) => {
-    try {
-      await fetch(`/api/notifications/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isCompleted: true, isRead: true }),
-      });
-      toast.success("Đã đánh dấu hoàn thành!");
-      fetchNotifications();
-    } catch {
-      toast.error("Lỗi");
-    }
-  };
+
 
   return (
     <div className="space-y-4">
@@ -157,50 +145,50 @@ export default function NotificationsPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {notifications.map((n) => (
-            <Card
-              key={n.id}
-              className={`transition-colors ${
-                !n.isRead ? "border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20" : ""
-              } ${n.isCompleted ? "opacity-60" : ""}`}
-            >
-              <CardContent className="flex items-start gap-3 py-3">
-                <div className={`mt-0.5 flex items-center justify-center w-8 h-8 rounded-full ${
-                  !n.isRead ? "bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400" : "bg-muted text-muted-foreground"
-                }`}>
-                  {categoryIcon(n.category)}
-                </div>
+          {notifications.map((n) => {
+            const isUnread = !n.isRead;
+            return (
+              <div key={n.id} className="relative group">
+                <Link href={n.actionUrl || "#"} onClick={() => { if (isUnread) markAsRead(n.id); }}>
+                  <Card
+                    className={`transition-colors cursor-pointer hover:bg-muted/50 ${
+                      isUnread ? "border-l-4 border-l-blue-500 bg-blue-50/30 dark:bg-blue-950/20" : ""
+                    }`}
+                  >
+                    <CardContent className="flex items-start gap-3 py-3">
+                      <div className={`mt-0.5 flex items-center justify-center w-8 h-8 rounded-full ${
+                        isUnread ? "bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400" : "bg-muted text-muted-foreground"
+                      }`}>
+                        {categoryIcon(n.category)}
+                      </div>
 
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    {priorityBadge(n.priority)}
-                    <span className="text-xs text-muted-foreground">
-                      {new Date(n.createdAt).toLocaleString("vi-VN")}
-                    </span>
-                  </div>
-                  <p className="text-sm mt-1">{n.message}</p>
-                  {n.actionUrl && (
-                    <Link href={n.actionUrl} className="text-xs text-blue-600 hover:underline mt-1 inline-block">
-                      Xem chi tiết →
-                    </Link>
-                  )}
-                </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          {priorityBadge(n.priority)}
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(n.createdAt).toLocaleString("vi-VN")}
+                          </span>
+                        </div>
+                        <p className={`text-sm mt-1 ${isUnread ? "font-medium" : "text-muted-foreground"}`}>{n.message}</p>
+                      </div>
 
-                <div className="flex items-center gap-1 shrink-0">
-                  {!n.isRead && (
-                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => markAsRead(n.id)}>
-                      <Check className="h-3 w-3" />
-                    </Button>
-                  )}
-                  {!n.isCompleted && (
-                    <Button size="sm" variant="ghost" className="h-7 text-xs text-green-600" onClick={() => markAsCompleted(n.id)}>
-                      <CheckCheck className="h-3 w-3 mr-1" /> Xong
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                      <div className="flex items-center gap-1 shrink-0 z-10">
+                        {isUnread && (
+                          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            markAsRead(n.id);
+                          }}>
+                            <Check className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

@@ -29,10 +29,12 @@ export const FULFILLMENT_TYPES = ["FBA", "FBM"] as const;
 export type FulfillmentType = (typeof FULFILLMENT_TYPES)[number];
 
 export const LISTING_STATUSES = [
-  "pending_review",
-  "editing",
-  "ready_to_publish",
-  "published",
+  "ready",
+  "uploaded",
+  "selling",
+  "error",
+  "fixed",
+  "delisted",
 ] as const;
 export type ListingStatus = (typeof LISTING_STATUSES)[number];
 
@@ -87,10 +89,12 @@ export const fileStatusLabels: Record<FileStatus, string> = {
 };
 
 export const listingStatusLabels: Record<ListingStatus, string> = {
-  pending_review: "Chờ duyệt",
-  editing: "Đang chỉnh sửa",
-  ready_to_publish: "Sẵn sàng đăng",
-  published: "Đã đăng",
+  ready: "Sẵn sàng",
+  uploaded: "Đã up",
+  selling: "Đang bán",
+  error: "Lỗi",
+  fixed: "Đã sửa",
+  delisted: "Bị sàn gỡ",
 };
 
 export const productionPriorityLabels: Record<ProductionPriority, string> = {

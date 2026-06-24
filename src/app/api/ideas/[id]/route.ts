@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { broadcastNotification } from "@/lib/socket-helper";
 import { can, type Role } from "@/lib/permissions";
 
 // GET /api/ideas/[id] - Get single idea with listings
@@ -36,6 +37,9 @@ export async function GET(
           include: {
             sellingAccount: { select: { id: true, name: true, platform: true } },
           },
+        },
+        productionRequests: {
+          select: { id: true, completedAt: true },
         },
       },
     });
@@ -79,18 +83,38 @@ export async function PATCH(
       );
     }
 
+    // Permission check for employees
+    if (currentRole === "employee" && idea.createdById !== session.user.id) {
+      return NextResponse.json({ error: "Bạn chỉ có thể chỉnh sửa ý tưởng do mình tạo" }, { status: 403 });
+    }
+
     // Build update data and audit logs
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updateData: any = { version: { increment: 1 } };
     const auditEntries: { field: string; oldVal: string | null; newVal: string | null }[] = [];
 
-    // Status change (approve)
+    // Status change (approve/reject)
     if (body.status !== undefined && body.status !== idea.status) {
-      if (body.status === "approved" && !can(currentRole, "approve_idea")) {
-        return NextResponse.json({ error: "Bạn không có quyền duyệt ý tưởng" }, { status: 403 });
+      if ((body.status === "approved" || body.status === "rejected") && !can(currentRole, "approve_idea")) {
+        return NextResponse.json({ error: "Bạn không có quyền duyệt/từ chối ý tưởng" }, { status: 403 });
       }
       auditEntries.push({ field: "status", oldVal: idea.status, newVal: body.status });
       updateData.status = body.status;
+      
+      // If approved or rejected, typically needsReReview is cleared
+      if (body.status === "approved" || body.status === "rejected") {
+        updateData.needsReReview = false;
+      }
+    }
+
+    // Review Comment
+    if (body.reviewComment !== undefined) {
+      updateData.reviewComment = body.reviewComment;
+    }
+
+    // Clear needsReReview manually
+    if (body.needsReReview !== undefined) {
+      updateData.needsReReview = body.needsReReview;
     }
 
     // Photo status
@@ -130,10 +154,20 @@ export async function PATCH(
       updateData.productionFileUrl = body.productionFileUrl;
     }
 
-    // Title / Description
-    if (body.title !== undefined) updateData.title = body.title;
-    if (body.description !== undefined) updateData.description = body.description;
-    if (body.sourceLinks !== undefined) updateData.sourceLinks = body.sourceLinks;
+    // Title / Description and core fields
+    let coreEdited = false;
+    if (body.title !== undefined) { updateData.title = body.title; coreEdited = true; }
+    if (body.description !== undefined) { updateData.description = body.description; coreEdited = true; }
+    if (body.sourceLinks !== undefined) { updateData.sourceLinks = body.sourceLinks; coreEdited = true; }
+    if (body.prompt !== undefined) { updateData.prompt = body.prompt; coreEdited = true; }
+    if (body.topicId !== undefined) { updateData.topicId = body.topicId; coreEdited = true; }
+    if (body.aiModelId !== undefined) { updateData.aiModelId = body.aiModelId; coreEdited = true; }
+    if (body.mainImageUrl !== undefined) { updateData.mainImageUrl = body.mainImageUrl; coreEdited = true; }
+
+    // If employee edits a non-reviewing idea, flag it for re-review
+    if (currentRole === "employee" && coreEdited && idea.status !== "reviewing") {
+      updateData.needsReReview = true;
+    }
 
     const updated = await db.idea.update({
       where: { id },
@@ -154,9 +188,159 @@ export async function PATCH(
       });
     }
 
+    // Notifications
+    // 1. Notify creator if manager/boss changes status
+    if (body.status && body.status !== idea.status && session.user.id !== idea.createdById) {
+      let type = "";
+      let message = "";
+      if (body.status === "approved") {
+        type = "idea_approved";
+        message = `Ý tưởng ${idea.msku} của bạn đã được duyệt.`;
+      } else if (body.status === "rejected") {
+        type = "idea_rejected";
+        message = `Ý tưởng ${idea.msku} của bạn bị từ chối. Lý do: ${body.reviewComment || "Không có"}`;
+      } else if (body.status === "reviewing") {
+        type = "idea_revision_requested";
+        message = `Ý tưởng ${idea.msku} của bạn cần được chỉnh sửa. Lý do: ${body.reviewComment || "Không có"}`;
+      }
+
+      if (type) {
+        await db.notification.create({
+          data: {
+            userId: idea.createdById,
+            type,
+            category: "general",
+            message,
+            actionUrl: `/ideas/${idea.id}`
+          }
+        });
+        broadcastNotification([idea.createdById], {
+          type,
+          message,
+          actionUrl: `/ideas/${idea.id}`
+        });
+      }
+    }
+
+    // 2. Notify creator if photo requested
+    if (body.photoStatus === "request_photo" && idea.photoStatus !== "request_photo" && session.user.id !== idea.createdById) {
+      await db.notification.create({
+        data: {
+          userId: idea.createdById,
+          type: "photo_requested",
+          category: "photo",
+          message: `Sếp/Quản lý đã yêu cầu làm ảnh và file thiết kế cho ý tưởng ${idea.msku}.`,
+          actionUrl: `/ideas/${idea.id}`
+        }
+      });
+      broadcastNotification([idea.createdById], {
+        type: "photo_requested",
+        message: `Sếp/Quản lý đã yêu cầu làm ảnh và file thiết kế cho ý tưởng ${idea.msku}.`,
+        actionUrl: `/ideas/${idea.id}`
+      });
+    }
+
+    // 3. Notify bosses/managers if employee updates idea and needs re-review
+    if (updateData.needsReReview) {
+      const managersAndBosses = await db.user.findMany({
+        where: { role: { in: ["manager", "boss"] }, status: "active" }
+      });
+      if (managersAndBosses.length > 0) {
+        await db.notification.createMany({
+          data: managersAndBosses.map(u => ({
+            userId: u.id,
+            type: "idea_updated",
+            category: "general",
+            message: `Nhân viên đã cập nhật ý tưởng ${idea.msku} sau khi có yêu cầu chỉnh sửa.`,
+            actionUrl: `/ideas/${idea.id}`
+          }))
+        });
+        broadcastNotification(managersAndBosses.map(u => u.id), {
+          type: "idea_updated",
+          message: `Nhân viên đã cập nhật ý tưởng ${idea.msku} sau khi có yêu cầu chỉnh sửa.`,
+          actionUrl: `/ideas/${idea.id}`
+        });
+      }
+    }
+
     return NextResponse.json(updated);
   } catch (error) {
     console.error("PATCH /api/ideas/[id] error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
+// DELETE /api/ideas/[id] - Delete idea
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const { id } = await params;
+    
+    const idea = await db.idea.findUnique({
+      where: { id },
+      include: {
+        amazonListing: true,
+        etsyListing: true,
+        productionRequests: true
+      }
+    });
+
+    if (!idea) {
+      return NextResponse.json({ error: "Idea not found" }, { status: 404 });
+    }
+
+    const role = session.user.role;
+    
+    // Check delete conditions
+    if (role === "employee") {
+      if (idea.createdById !== session.user.id) {
+        return NextResponse.json({ error: "Bạn chỉ được xoá ý tưởng của chính mình" }, { status: 403 });
+      }
+      
+      const canDelete = 
+        idea.status === "reviewing" || 
+        (idea.status === "approved" && (idea.photoStatus === "not_requested" || idea.photoStatus === "awaiting_photos") && idea.fileStatus !== "approved" && !idea.productionFileUrl);
+        
+      if (!canDelete) {
+        return NextResponse.json({ error: "Ý tưởng đã chuyển sang giai đoạn sản xuất hoặc đăng bán nên không thể xoá" }, { status: 403 });
+      }
+    }
+
+    // Boss/Manager can delete without condition, but client handles warnings.
+    // Proceed to delete
+    
+    await db.$transaction(async (tx) => {
+      // Delete child relations
+      if (idea.amazonListing) {
+        await tx.amazonListing.delete({ where: { ideaId: id } });
+      }
+      if (idea.etsyListing) {
+        await tx.etsyListing.delete({ where: { ideaId: id } });
+      }
+      // Delete production requests and their steps
+      if (idea.productionRequests.length > 0) {
+        for (const req of idea.productionRequests) {
+          await tx.productionStep.deleteMany({ where: { productionRequestId: req.id } });
+        }
+        await tx.productionRequest.deleteMany({ where: { ideaId: id } });
+      }
+      
+      // Delete audit logs associated
+      await tx.auditLog.deleteMany({ where: { entityType: "idea", entityId: id } });
+      
+      // Finally delete the idea
+      await tx.idea.delete({ where: { id } });
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("DELETE /api/ideas/[id] error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

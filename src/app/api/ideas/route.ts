@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { broadcastNotification } from "@/lib/socket-helper";
 import { generateMsku, validateMsku } from "@/lib/msku-generator";
 import type { Role } from "@/lib/permissions";
 
@@ -20,37 +21,54 @@ export async function GET(req: NextRequest) {
 
     // Build where clause based on tab
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const where: any = {};
+    const where: any = { AND: [] };
 
     if (mine) {
-      where.createdById = session.user.id;
+      where.AND.push({ createdById: session.user.id });
     }
 
     if (search) {
-      where.OR = [
-        { sku: { contains: search } },
-        { msku: { contains: search } },
-      ];
+      where.AND.push({
+        OR: [
+          { sku: { contains: search } },
+          { msku: { contains: search } },
+        ],
+      });
     }
 
     if (topicId) {
-      where.topicId = topicId;
+      where.AND.push({ topicId });
     }
 
     switch (tab) {
+      case "all":
+        // No status filter
+        break;
       case "reviewing":
-        where.status = "reviewing";
+        where.AND.push({
+          OR: [
+            { status: "reviewing" },
+            { needsReReview: true },
+          ],
+        });
         break;
       case "photos":
-        where.status = "approved";
-        where.photoStatus = { in: ["not_requested", "awaiting_photos", "pending_approval", "revision_requested"] };
+        where.AND.push({
+          status: "approved",
+          photoStatus: { in: ["not_requested", "awaiting_photos", "pending_approval", "revision_requested"] }
+        });
         break;
       case "ready":
-        where.photoStatus = "approved";
-        where.status = { not: "published" };
+        where.AND.push({
+          photoStatus: "approved",
+          status: { not: "published" }
+        });
         break;
       case "published":
-        where.status = "published";
+        where.AND.push({ status: "published" });
+        break;
+      case "rejected":
+        where.AND.push({ status: "rejected" });
         break;
     }
 
@@ -79,6 +97,7 @@ export async function GET(req: NextRequest) {
       createdByName: idea.createdBy.fullName,
       createdAt: idea.createdAt.toISOString(),
       title: idea.title,
+      needsReReview: idea.needsReReview,
     }));
 
     return NextResponse.json(result);
@@ -166,6 +185,30 @@ export async function POST(req: Request) {
         changedById: session.user.id,
       },
     });
+
+    // Notify boss/managers if employee created it
+    if (role === "employee") {
+      const managersAndBosses = await db.user.findMany({
+        where: { role: { in: ["manager", "boss"] }, status: "active" }
+      });
+      if (managersAndBosses.length > 0) {
+        await db.notification.createMany({
+          data: managersAndBosses.map(u => ({
+            userId: u.id,
+            type: "new_idea",
+            category: "general",
+            message: `Nhân viên ${session.user.nameAbbreviation || session.user.fullName || 'ẩn danh'} vừa tạo ý tưởng mới (MSKU: ${msku})`,
+            actionUrl: `/ideas/${idea.id}`
+          }))
+        });
+
+        broadcastNotification(managersAndBosses.map(u => u.id), {
+          type: "new_idea",
+          message: `Nhân viên ${session.user.nameAbbreviation || session.user.fullName || 'ẩn danh'} vừa tạo ý tưởng mới (MSKU: ${msku})`,
+          actionUrl: `/ideas/${idea.id}`
+        });
+      }
+    }
 
     return NextResponse.json(idea, { status: 201 });
   } catch (error) {

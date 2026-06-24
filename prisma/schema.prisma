@@ -22,6 +22,8 @@ model User {
   role              String   @default("employee") // employee | manager | boss
   status            String   @default("active") // active | inactive
   startDate         DateTime @default(now()) @map("start_date")
+  avatarUrl         String?  @map("avatar_url")
+  notificationSettings String? @map("notification_settings") // JSON string
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
@@ -61,6 +63,8 @@ model Idea {
   // Amazon/Etsy content - filled at idea creation
   title               String?
   description         String?
+  reviewComment       String?  @map("review_comment")
+  needsReReview       Boolean  @default(false) @map("needs_rereview")
   version             Int      @default(1)
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
@@ -99,7 +103,8 @@ model AmazonListing {
   galleryImages         String?  @map("gallery_images") // JSON array of strings (max 9)
   videoUrl              String?  @map("video_url")
   contentAPlusUrl       String?  @map("content_a_plus_url")
-  listingStatus         String   @default("pending_review") @map("listing_status") // pending_review | editing | ready_to_publish | published
+  listingStatus         String   @default("ready") @map("listing_status") // ready | uploaded | selling | error | fixed | delisted
+  listingStatusReason   String?  @map("listing_status_reason") // Reason for error/delisted
   version               Int      @default(1)
   createdAt             DateTime @default(now()) @map("created_at")
   updatedAt             DateTime @updatedAt @map("updated_at")
@@ -128,7 +133,8 @@ model EtsyListing {
   useSharedGallery      Boolean  @default(false) @map("use_shared_gallery") // Use Amazon's gallery
   videoUrl              String?  @map("video_url")
   useAmazonVideo        Boolean  @default(false) @map("use_amazon_video")
-  listingStatus         String   @default("pending_review") @map("listing_status")
+  listingStatus         String   @default("ready") @map("listing_status") // ready | uploaded | selling | error | fixed | delisted
+  listingStatusReason   String?  @map("listing_status_reason") // Reason for error/delisted
   version               Int      @default(1)
   createdAt             DateTime @default(now()) @map("created_at")
   updatedAt             DateTime @updatedAt @map("updated_at")

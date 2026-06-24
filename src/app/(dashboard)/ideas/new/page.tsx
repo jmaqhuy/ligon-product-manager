@@ -70,12 +70,12 @@ export default function CreateIdeaPage() {
     fetch("/api/topics")
       .then((r) => r.json())
       .then(setTopics)
-      .catch(() => {});
+      .catch(() => { });
 
     fetch("/api/ai-models")
       .then((r) => r.json())
       .then(setAiModels)
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const addSourceLink = () => {

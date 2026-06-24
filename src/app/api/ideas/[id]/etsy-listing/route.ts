@@ -35,6 +35,7 @@ export async function PUT(
       videoUrl,
       useAmazonVideo,
       listingStatus,
+      listingStatusReason,
     } = body;
 
     const listing = await db.etsyListing.upsert({
@@ -52,6 +53,7 @@ export async function PUT(
         videoUrl,
         useAmazonVideo: useAmazonVideo ?? false,
         listingStatus,
+        listingStatusReason: (listingStatus === "error" || listingStatus === "delisted") ? listingStatusReason : null,
         version: { increment: 1 },
       },
       create: {
@@ -67,7 +69,8 @@ export async function PUT(
         useSharedGallery: useSharedGallery ?? false,
         videoUrl,
         useAmazonVideo: useAmazonVideo ?? false,
-        listingStatus: listingStatus || "pending_review",
+        listingStatus: listingStatus || "ready",
+        listingStatusReason: (listingStatus === "error" || listingStatus === "delisted") ? listingStatusReason : null,
       },
     });
 

@@ -12,6 +12,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
+import { AuditLogViewer } from "@/components/audit-log-viewer";
+import { ImagePreviewInput } from "@/components/image-preview-input";
 import {
   Select,
   SelectContent,
@@ -38,10 +40,25 @@ import {
   Loader2,
   Save,
   ShieldCheck,
+  PlaySquare,
+  AlertTriangle,
+  Pencil,
+  Edit3,
   XCircle,
+  X,
+  Trash2,
 } from "lucide-react";
+import { CopyButton } from "@/components/copy-button";
+import { EditableField } from "@/components/editable-field";
 import { toast } from "sonner";
 import Link from "next/link";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   ideaStatusLabels,
   photoStatusLabels,
@@ -90,6 +107,21 @@ export default function IdeaDetailPage() {
   const [idea, setIdea] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [reviewComment, setReviewComment] = useState("");
+  const [actionType, setActionType] = useState<"approve" | "reject" | "revise" | null>(null);
+
+  // Edit modes
+  const [isEditingIdea, setIsEditingIdea] = useState(false);
+  const [isEditingAmz, setIsEditingAmz] = useState(false);
+  const [isEditingEtsy, setIsEditingEtsy] = useState(false);
+  const [photoRevisionInput, setPhotoRevisionInput] = useState("");
+
+  // Idea general form state
+  const [ideaForm, setIdeaForm] = useState({
+    title: "",
+    description: "",
+    prompt: "",
+  });
 
   // Amazon listing form state
   const [amzForm, setAmzForm] = useState({
@@ -108,7 +140,8 @@ export default function IdeaDetailPage() {
     galleryImages: [""],
     videoUrl: "",
     contentAPlusUrl: "",
-    listingStatus: "pending_review",
+    listingStatus: "ready",
+    listingStatusReason: "",
   });
 
   // Etsy listing form state
@@ -125,7 +158,8 @@ export default function IdeaDetailPage() {
     useSharedGallery: false,
     videoUrl: "",
     useAmazonVideo: false,
-    listingStatus: "pending_review",
+    listingStatus: "ready",
+    listingStatusReason: "",
   });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -141,6 +175,12 @@ export default function IdeaDetailPage() {
       }
       const data = await res.json();
       setIdea(data);
+
+      setIdeaForm({
+        title: data.title || "",
+        description: data.description || "",
+        prompt: data.prompt || "",
+      });
 
       // Populate Amazon form
       if (data.amazonListing) {
@@ -165,7 +205,8 @@ export default function IdeaDetailPage() {
           })(),
           videoUrl: a.videoUrl || "",
           contentAPlusUrl: a.contentAPlusUrl || "",
-          listingStatus: a.listingStatus || "pending_review",
+          listingStatus: a.listingStatus || "ready",
+          listingStatusReason: a.listingStatusReason || "",
         });
       } else {
         // Pre-fill from idea
@@ -197,7 +238,8 @@ export default function IdeaDetailPage() {
           useSharedGallery: e.useSharedGallery ?? false,
           videoUrl: e.videoUrl || "",
           useAmazonVideo: e.useAmazonVideo ?? false,
-          listingStatus: e.listingStatus || "pending_review",
+          listingStatus: e.listingStatus || "ready",
+          listingStatusReason: e.listingStatusReason || "",
         });
       } else {
         setEtsyForm((prev) => ({
@@ -219,20 +261,114 @@ export default function IdeaDetailPage() {
   }, [fetchIdea]);
 
   // ─── Actions ──────────────────────────────────────────────────────
-  const handleApprove = async () => {
+  const handleReviewAction = async (overrideAction?: "approve" | "reject" | "revise") => {
+    const action = overrideAction || actionType;
+    if (!action) return;
+    if ((action === "reject" || action === "revise") && !reviewComment.trim()) {
+      toast.error("Vui lòng nhập lý do");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const status = action === "approve" ? "approved" : action === "reject" ? "rejected" : "reviewing";
+      const res = await fetch(`/api/ideas/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status,
+          reviewComment: reviewComment.trim() || undefined,
+          version: idea.version,
+        }),
+      });
+
+      if (res.ok) {
+        toast.success(`Đã ${action === "approve" ? "duyệt" : action === "reject" ? "từ chối" : "yêu cầu sửa"} ý tưởng!`);
+        
+        // Find next idea in reviewing tab
+        if (action === "approve" || action === "reject") {
+          const listRes = await fetch('/api/ideas?tab=reviewing');
+          if (listRes.ok) {
+            const list = await listRes.json();
+            const nextIdea = list.find((i: any) => i.id !== id);
+            if (nextIdea) {
+              router.push(`/ideas/${nextIdea.id}`);
+              return;
+            }
+          }
+          router.push("/ideas");
+        } else {
+          fetchIdea();
+          setActionType(null);
+          setReviewComment("");
+        }
+      } else {
+        const error = await res.json();
+        toast.error(error.error || "Lỗi cập nhật ý tưởng");
+      }
+    } catch {
+      toast.error("Lỗi hệ thống");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteIdea = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/ideas/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        toast.success("Đã xoá ý tưởng thành công!");
+        router.push("/ideas");
+      } else {
+        const err = await res.json();
+        toast.error(err.error || "Không thể xoá ý tưởng này");
+      }
+    } catch {
+      toast.error("Lỗi mạng khi xoá ý tưởng");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCloneIdea = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/ideas/${id}/clone`, { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        toast.success("Đã tạo bản sao ý tưởng!");
+        router.push(`/ideas/${data.id}`);
+      } else {
+        const data = await res.json();
+        toast.error(data.error || "Lỗi tạo bản sao");
+      }
+    } catch {
+      toast.error("Lỗi hệ thống");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveIdea = async () => {
     setSaving(true);
     try {
       const res = await fetch(`/api/ideas/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "approved", version: idea.version }),
+        body: JSON.stringify({
+          ...ideaForm,
+          version: idea.version,
+        }),
       });
+
       if (res.ok) {
-        toast.success("Đã duyệt ý tưởng!");
-        fetchIdea();
+        toast.success("Đã cập nhật nội dung ý tưởng");
+        setIsEditingIdea(false);
+        fetchIdea(); // Refresh to get latest version and history
       } else {
         const data = await res.json();
-        toast.error(data.error || "Lỗi duyệt ý tưởng");
+        toast.error(data.error || "Lỗi cập nhật");
       }
     } catch {
       toast.error("Lỗi hệ thống");
@@ -330,8 +466,16 @@ export default function IdeaDetailPage() {
     try { return JSON.parse(idea.sourceLinks || "[]"); } catch { return []; }
   })();
 
-  const canApprove = role && can(role, "approve_idea") && idea.status === "reviewing";
+  const canApprove = role && can(role, "approve_idea") && (idea.status === "reviewing" || idea.needsReReview);
   const canManagePhotos = role && can(role, "assign_photo_task");
+  const canDeleteIdea = role && (
+    role !== "employee" || 
+    (idea.createdById === session?.user?.id && 
+      (idea.status === "reviewing" || 
+       (idea.status === "approved" && (idea.photoStatus === "not_requested" || idea.photoStatus === "awaiting_photos") && idea.fileStatus !== "approved" && !idea.productionFileUrl)
+      )
+    )
+  );
   const mainImageDirectUrl = convertToDirectImageUrl(idea.mainImageUrl);
 
   return (
@@ -345,6 +489,9 @@ export default function IdeaDetailPage() {
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl font-bold tracking-tight">{idea.msku}</h1>
             {statusBadge(idea.status, ideaStatusLabels)}
+            {idea.needsReReview && (
+              <Badge variant="destructive" className="bg-red-500 text-white animate-pulse">Sửa đổi mới</Badge>
+            )}
             <Badge variant="outline">{idea.fulfillmentType}</Badge>
           </div>
           <p className="text-sm text-muted-foreground mt-1">
@@ -354,30 +501,113 @@ export default function IdeaDetailPage() {
 
         {/* Action buttons */}
         <div className="flex items-center gap-2 shrink-0">
-          {canApprove && (
+          {canDeleteIdea && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button className="bg-green-600 hover:bg-green-700 text-white">
-                  <ShieldCheck className="mr-2 h-4 w-4" />
-                  Duyệt ý tưởng
+                <Button variant="outline" className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700" disabled={saving}>
+                  <Trash2 className="h-4 w-4 mr-2" /> Xoá
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Duyệt ý tưởng này?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Ý tưởng <strong>{idea.msku}</strong> sẽ được chuyển sang trạng thái &ldquo;Đã được duyệt&rdquo; và sẵn sàng điền thông tin Listing.
+                  <AlertDialogTitle className="flex items-center gap-2">
+                    {(idea.status === "published" || (idea.productionRequests && idea.productionRequests.length > 0)) && (
+                      <AlertTriangle className="h-5 w-5 text-red-500" />
+                    )}
+                    Xác nhận xoá ý tưởng {idea.msku}
+                  </AlertDialogTitle>
+                  <AlertDialogDescription asChild>
+                    <div className="space-y-2">
+                      {idea.status === "published" && (
+                        <div className="rounded-md bg-red-50 dark:bg-red-950/30 p-3 border border-red-200 dark:border-red-800">
+                          <p className="text-sm font-medium text-red-800 dark:text-red-300">⚠️ Ý tưởng này đã được đăng bán!</p>
+                          <p className="text-xs text-red-700 dark:text-red-400 mt-1">
+                            {idea.amazonListing ? "• Đã có Amazon Listing" : ""}
+                            {idea.etsyListing ? "\n• Đã có Etsy Listing" : ""}
+                          </p>
+                          <p className="text-xs text-red-600 dark:text-red-400 mt-1">Xoá sẽ làm mất toàn bộ thông tin đăng bán và dữ liệu liên quan.</p>
+                        </div>
+                      )}
+                      {idea.productionRequests && idea.productionRequests.length > 0 && (
+                        <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 p-3 border border-amber-200 dark:border-amber-800">
+                          <p className="text-sm font-medium text-amber-800 dark:text-amber-300">⚠️ Đang có {idea.productionRequests.length} yêu cầu sản xuất!</p>
+                          <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Xoá ý tưởng sẽ xoá luôn tất cả yêu cầu sản xuất liên quan.</p>
+                        </div>
+                      )}
+                      <p className="text-sm text-muted-foreground">
+                        {role !== "employee" 
+                          ? "Bạn đang thực hiện xoá ý tưởng với quyền Quản lý/Sếp. Hành động này không thể hoàn tác." 
+                          : "Bạn có chắc chắn muốn xoá ý tưởng này không? Hành động này không thể hoàn tác."}
+                      </p>
+                    </div>
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Huỷ</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleApprove} disabled={saving}>
-                    {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Duyệt
-                  </AlertDialogAction>
+                  <AlertDialogAction onClick={handleDeleteIdea} className="bg-red-600 hover:bg-red-700">Tiếp tục xoá</AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+          )}
+
+          {idea.status === "rejected" && (
+            <Button variant="outline" onClick={handleCloneIdea} disabled={saving}>
+              Tạo bản sao
+            </Button>
+          )}
+
+          {canApprove && (
+            <div className="flex gap-2">
+              <Dialog open={actionType === "reject" || actionType === "revise"} onOpenChange={(open) => !open && setActionType(null)}>
+                <DialogTrigger asChild>
+                  <div className="flex gap-2">
+                    <Button variant="outline" className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700" onClick={() => setActionType("reject")}>
+                      Từ chối
+                    </Button>
+                    <Button variant="outline" className="text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700" onClick={() => setActionType("revise")}>
+                      Yêu cầu sửa
+                    </Button>
+                  </div>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle className="text-xl">
+                      {actionType === "reject" ? "Từ chối ý tưởng này?" : "Yêu cầu chỉnh sửa?"}
+                    </DialogTitle>
+                  </DialogHeader>
+                  <div className="mt-4 space-y-3">
+                    <Label htmlFor="comment" className="font-semibold">Lý do {actionType === "reject" ? "từ chối" : "yêu cầu sửa"} (Bắt buộc)</Label>
+                    <Textarea
+                      id="comment"
+                      autoFocus
+                      value={reviewComment}
+                      onChange={(e) => setReviewComment(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          handleReviewAction();
+                        }
+                      }}
+                      placeholder="Nhập lý do chi tiết để nhân viên có thể cải thiện..."
+                      rows={4}
+                      className="resize-none"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2 mt-4">
+                    <Button variant="ghost" onClick={() => { setActionType(null); setReviewComment(""); }}>Huỷ</Button>
+                    <Button onClick={(e) => { e.preventDefault(); handleReviewAction(); }} disabled={saving} className={actionType === "reject" ? "bg-red-600 hover:bg-red-700" : "bg-amber-600 hover:bg-amber-700"}>
+                      {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Xác nhận
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
+              <Button className="bg-green-600 hover:bg-green-700 text-white shadow-sm" onClick={() => handleReviewAction("approve")} disabled={saving}>
+                {saving && actionType === "approve" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                Duyệt ý tưởng
+              </Button>
+            </div>
           )}
         </div>
       </div>
@@ -392,17 +622,27 @@ export default function IdeaDetailPage() {
             </CardHeader>
             <CardContent>
               {mainImageDirectUrl ? (
-                <div className="relative aspect-square rounded-lg overflow-hidden bg-muted">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={mainImageDirectUrl}
-                    alt={idea.msku}
-                    className="object-cover w-full h-full"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = "none";
-                    }}
-                  />
-                </div>
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <div className="relative aspect-square rounded-lg overflow-hidden bg-muted cursor-pointer group">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={mainImageDirectUrl}
+                        alt={idea.msku}
+                        className="object-cover w-full h-full transition-transform duration-300 group-hover:scale-125"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = "none";
+                        }}
+                      />
+                    </div>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-[95vw] w-fit bg-transparent border-none shadow-none" showCloseButton={false}>
+                    <div className="relative flex justify-center items-center p-0">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={mainImageDirectUrl} alt="Full view" className="max-h-[95vh] max-w-[95vw] w-auto h-auto rounded-md object-contain" />
+                    </div>
+                  </DialogContent>
+                </Dialog>
               ) : (
                 <div className="aspect-square rounded-lg bg-muted flex items-center justify-center">
                   <ImageIcon className="h-12 w-12 text-muted-foreground" />
@@ -425,13 +665,19 @@ export default function IdeaDetailPage() {
               <CardTitle className="text-sm font-medium">Thông tin</CardTitle>
             </CardHeader>
             <CardContent className="text-sm space-y-2">
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center group/sku">
                 <span className="text-muted-foreground">SKU</span>
-                <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{idea.sku}</code>
+                <div className="flex items-center gap-2">
+                  <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{idea.sku}</code>
+                  <CopyButton text={idea.sku} className="h-5 w-5 opacity-0 group-hover/sku:opacity-100" />
+                </div>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center group/msku">
                 <span className="text-muted-foreground">MSKU</span>
-                <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{idea.msku}</code>
+                <div className="flex items-center gap-2">
+                  <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{idea.msku}</code>
+                  <CopyButton text={idea.msku} className="h-5 w-5 opacity-0 group-hover/msku:opacity-100" />
+                </div>
               </div>
               <Separator />
               <div className="flex justify-between items-center">
@@ -459,60 +705,204 @@ export default function IdeaDetailPage() {
           </Card>
 
           {/* Photo & File Management */}
-          {canManagePhotos && idea.status !== "reviewing" && (
+          {idea.status !== "reviewing" && (
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium">Quản lý ảnh & File</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Trạng thái ảnh</Label>
-                  <Select
-                    value={idea.photoStatus}
-                    onValueChange={(v) => handleUpdateIdea({ photoStatus: v })}
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(photoStatusLabels).map(([k, v]) => (
-                        <SelectItem key={k} value={k}>{v}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                {/* Photo Status Display */}
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-muted-foreground">Trạng thái ảnh</span>
+                  {statusBadge(idea.photoStatus, photoStatusLabels)}
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Trạng thái file sản xuất</Label>
-                  <Select
-                    value={idea.fileStatus}
-                    onValueChange={(v) => handleUpdateIdea({ fileStatus: v })}
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(fileStatusLabels).map(([k, v]) => (
-                        <SelectItem key={k} value={k}>{v}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {canManagePhotos && (
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Loại Fulfillment</Label>
-                    <Select
-                      value={idea.fulfillmentType}
-                      onValueChange={(v) => handleUpdateIdea({ fulfillmentType: v })}
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="FBA">FBA</SelectItem>
-                        <SelectItem value="FBM">FBM</SelectItem>
-                      </SelectContent>
-                    </Select>
+
+                {/* Photo Assignee Info */}
+                {idea.photoAssignee && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-muted-foreground">Người nhận việc</span>
+                    <span className="text-xs font-medium">{idea.photoAssignee.fullName}</span>
                   </div>
+                )}
+
+                {/* === WORKFLOW ACTIONS === */}
+
+                {/* Step 1: Sếp/QL yêu cầu làm ảnh (khi photo_status = not_requested) */}
+                {canManagePhotos && idea.photoStatus === "not_requested" && (
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    onClick={() => handleUpdateIdea({ photoStatus: "awaiting_photos" })}
+                    disabled={saving}
+                  >
+                    <ImageIcon className="h-4 w-4 mr-2" />
+                    Yêu cầu làm ảnh
+                  </Button>
+                )}
+
+                {/* Step 2: NV nhận nhiệm vụ (khi awaiting_photos và chưa có ai nhận) */}
+                {idea.photoStatus === "awaiting_photos" && !idea.photoAssigneeId && (
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    variant="default"
+                    onClick={() => handleUpdateIdea({ photoAssigneeId: session?.user?.id })}
+                    disabled={saving}
+                  >
+                    <Check className="h-4 w-4 mr-2" />
+                    Nhận nhiệm vụ làm ảnh
+                  </Button>
+                )}
+
+                {/* Step 2b: NV đã nhận - hiện nút hủy (chỉ người nhận mới thấy) */}
+                {idea.photoStatus === "awaiting_photos" && idea.photoAssigneeId === session?.user?.id && (
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    variant="outline"
+                    onClick={() => handleUpdateIdea({ photoAssigneeId: null })}
+                    disabled={saving}
+                  >
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Hủy nhận nhiệm vụ
+                  </Button>
+                )}
+
+                {/* Step 2c: Đang chờ - người khác đã nhận (thông báo) */}
+                {idea.photoStatus === "awaiting_photos" && idea.photoAssigneeId && idea.photoAssigneeId !== session?.user?.id && !canManagePhotos && (
+                  <p className="text-xs text-muted-foreground italic">
+                    {idea.photoAssignee?.fullName || "Nhân viên khác"} đã nhận nhiệm vụ này
+                  </p>
+                )}
+
+                {/* Step 2d: Sếp/QL có thể gỡ assignee nếu cần */}
+                {canManagePhotos && idea.photoStatus === "awaiting_photos" && idea.photoAssigneeId && (
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    variant="ghost"
+                    onClick={() => handleUpdateIdea({ photoAssigneeId: null })}
+                    disabled={saving}
+                  >
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Gỡ người nhận ({idea.photoAssignee?.fullName})
+                  </Button>
+                )}
+
+                {/* Revision requested note */}
+                {idea.photoStatus === "revision_requested" && idea.photoRevisionNote && (
+                  <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 p-2.5 border border-amber-200 dark:border-amber-800">
+                    <p className="text-xs font-medium text-amber-800 dark:text-amber-300 mb-1">Yêu cầu sửa ảnh:</p>
+                    <p className="text-xs text-amber-700 dark:text-amber-400">{idea.photoRevisionNote}</p>
+                  </div>
+                )}
+
+                {/* Step 3: NV nộp ảnh (khi đã nhận nhiệm vụ, status = awaiting_photos) */}
+                {idea.photoStatus === "awaiting_photos" && idea.photoAssigneeId === session?.user?.id && (
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    onClick={() => handleUpdateIdea({ photoStatus: "pending_approval" })}
+                    disabled={saving}
+                  >
+                    <ImageIcon className="h-4 w-4 mr-2" />
+                    Nộp ảnh để duyệt
+                  </Button>
+                )}
+
+                {/* Step 3b: NV nộp lại ảnh (khi revision_requested, chỉ người nhận) */}
+                {idea.photoStatus === "revision_requested" && idea.photoAssigneeId === session?.user?.id && (
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    onClick={() => handleUpdateIdea({ photoStatus: "pending_approval" })}
+                    disabled={saving}
+                  >
+                    <ImageIcon className="h-4 w-4 mr-2" />
+                    Nộp lại ảnh đã sửa
+                  </Button>
+                )}
+
+                {/* Step 4: Sếp/QL duyệt ảnh (khi pending_approval) */}
+                {canManagePhotos && idea.photoStatus === "pending_approval" && (
+                  <div className="space-y-2">
+                    <Button
+                      size="sm"
+                      className="w-full bg-green-600 hover:bg-green-700"
+                      onClick={() => handleUpdateIdea({ photoStatus: "approved" })}
+                      disabled={saving}
+                    >
+                      <ShieldCheck className="h-4 w-4 mr-2" />
+                      Duyệt ảnh
+                    </Button>
+                    <div className="space-y-1.5">
+                      <Input
+                        value={photoRevisionInput}
+                        onChange={(e) => setPhotoRevisionInput(e.target.value)}
+                        placeholder="Lý do yêu cầu sửa..."
+                        className="h-8 text-xs"
+                      />
+                      <Button
+                        size="sm"
+                        className="w-full"
+                        variant="outline"
+                        onClick={() => {
+                          if (!photoRevisionInput.trim()) {
+                            toast.error("Vui lòng nhập lý do yêu cầu sửa ảnh");
+                            return;
+                          }
+                          handleUpdateIdea({ 
+                            photoStatus: "revision_requested",
+                            photoRevisionNote: photoRevisionInput.trim()
+                          });
+                          setPhotoRevisionInput("");
+                        }}
+                        disabled={saving}
+                      >
+                        <Edit3 className="h-4 w-4 mr-2" />
+                        Yêu cầu sửa ảnh
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                <Separator />
+
+                {/* File Status - only admin */}
+                {canManagePhotos && (
+                  <>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Trạng thái file sản xuất</Label>
+                      <Select
+                        value={idea.fileStatus}
+                        onValueChange={(v) => handleUpdateIdea({ fileStatus: v })}
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(fileStatusLabels).map(([k, v]) => (
+                            <SelectItem key={k} value={k}>{v}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Loại Fulfillment</Label>
+                      <Select
+                        value={idea.fulfillmentType}
+                        onValueChange={(v) => handleUpdateIdea({ fulfillmentType: v })}
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="FBA">FBA</SelectItem>
+                          <SelectItem value="FBM">FBM</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -522,7 +912,7 @@ export default function IdeaDetailPage() {
         {/* Right: Tabs for content, amazon, etsy */}
         <div className="lg:col-span-2">
           <Tabs defaultValue="content">
-            <TabsList className="w-full grid grid-cols-3">
+            <TabsList className="w-full grid grid-cols-4">
               <TabsTrigger value="content">Nội dung</TabsTrigger>
               <TabsTrigger value="amazon">
                 Amazon {idea.amazonListing && <Check className="ml-1 h-3 w-3 text-green-500" />}
@@ -530,63 +920,87 @@ export default function IdeaDetailPage() {
               <TabsTrigger value="etsy">
                 Etsy {idea.etsyListing && <Check className="ml-1 h-3 w-3 text-green-500" />}
               </TabsTrigger>
+              <TabsTrigger value="history">Lịch sử</TabsTrigger>
             </TabsList>
 
             {/* Content Tab */}
             <TabsContent value="content" className="mt-4 space-y-4">
               <Card>
-                <CardHeader>
+                <CardHeader className="flex flex-row items-center justify-between">
                   <CardTitle className="text-base">Prompt & Nội dung</CardTitle>
+                  <div>
+                    {!isEditingIdea ? (
+                      <Button variant="ghost" size="sm" onClick={() => setIsEditingIdea(true)}>
+                        <Pencil className="h-4 w-4 mr-2" /> Chỉnh sửa
+                      </Button>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={() => setIsEditingIdea(false)}>
+                          <X className="h-4 w-4 mr-2" /> Huỷ
+                        </Button>
+                        <Button size="sm" onClick={handleSaveIdea} disabled={saving}>
+                          <Save className="h-4 w-4 mr-2" /> Lưu
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Prompt</Label>
-                    <div className="bg-muted rounded-lg p-3 text-sm whitespace-pre-wrap">{idea.prompt}</div>
-                  </div>
+                  <EditableField
+                    label="Tiêu đề (Item Name)"
+                    value={ideaForm.title}
+                    onChange={(v) => setIdeaForm({ ...ideaForm, title: v })}
+                    isEditing={isEditingIdea}
+                    placeholder="Nhập tiêu đề sản phẩm..."
+                  />
+                  <EditableField
+                    label="Mô tả sản phẩm"
+                    value={ideaForm.description}
+                    onChange={(v) => setIdeaForm({ ...ideaForm, description: v })}
+                    isEditing={isEditingIdea}
+                    type="textarea"
+                    rows={4}
+                    placeholder="Nhập mô tả..."
+                  />
+                  <EditableField
+                    label="Prompt"
+                    value={ideaForm.prompt}
+                    onChange={(v) => setIdeaForm({ ...ideaForm, prompt: v })}
+                    isEditing={isEditingIdea}
+                    type="textarea"
+                    rows={4}
+                  />
                   {sourceLinks.length > 0 && (
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Liên kết nguồn</Label>
                       <div className="space-y-1">
-                        {sourceLinks.map((link: string, i: number) => (
-                          <a
-                            key={i}
-                            href={link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1 text-sm text-blue-600 hover:underline"
-                          >
-                            <ExternalLink className="h-3 w-3" /> {link.length > 60 ? link.slice(0, 60) + "..." : link}
-                          </a>
-                        ))}
+                        {sourceLinks.map((link: string, i: number) => {
+                          let domain = link;
+                          try { domain = new URL(link).hostname; } catch {}
+                          return (
+                            <a
+                              key={i}
+                              href={link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 text-sm text-blue-600 hover:underline"
+                            >
+                              <ExternalLink className="h-3 w-3" /> {domain}
+                            </a>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
-                  <Separator />
-                  <div className="space-y-1.5">
-                    <Label htmlFor="idea-title">Tiêu đề sản phẩm</Label>
-                    <Input
-                      id="idea-title"
-                      defaultValue={idea.title || ""}
-                      onBlur={(e) => {
-                        if (e.target.value !== (idea.title || "")) {
-                          handleUpdateIdea({ title: e.target.value });
-                        }
-                      }}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="idea-desc">Mô tả sản phẩm</Label>
-                    <Textarea
-                      id="idea-desc"
-                      defaultValue={idea.description || ""}
-                      rows={4}
-                      onBlur={(e) => {
-                        if (e.target.value !== (idea.description || "")) {
-                          handleUpdateIdea({ description: e.target.value });
-                        }
-                      }}
-                    />
-                  </div>
+                  {idea.reviewComment && (
+                    <>
+                      <Separator />
+                      <div className="space-y-1.5 bg-red-50 p-3 rounded-lg border border-red-100">
+                        <Label className="text-xs text-red-800 font-semibold">Ghi chú của Sếp/Quản lý</Label>
+                        <p className="text-sm text-red-700 whitespace-pre-wrap">{idea.reviewComment}</p>
+                      </div>
+                    </>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -594,19 +1008,37 @@ export default function IdeaDetailPage() {
             {/* Amazon Listing Tab */}
             <TabsContent value="amazon" className="mt-4 space-y-4">
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    Amazon Listing
-                    {idea.amazonListing && statusBadge(idea.amazonListing.listingStatus, listingStatusLabels)}
-                  </CardTitle>
-                  <CardDescription>Điền thông tin sản phẩm trên Amazon</CardDescription>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      Amazon Listing
+                      {idea.amazonListing && statusBadge(idea.amazonListing.listingStatus, listingStatusLabels)}
+                    </CardTitle>
+                    <CardDescription>Điền thông tin sản phẩm trên Amazon</CardDescription>
+                  </div>
+                  <div>
+                    {!isEditingAmz ? (
+                      <Button variant="ghost" size="sm" onClick={() => setIsEditingAmz(true)}>
+                        <Pencil className="h-4 w-4 mr-2" /> Chỉnh sửa
+                      </Button>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={() => setIsEditingAmz(false)}>
+                          <X className="h-4 w-4 mr-2" /> Huỷ
+                        </Button>
+                        <Button size="sm" onClick={handleSaveAmazon} disabled={saving}>
+                          <Save className="h-4 w-4 mr-2" /> Lưu
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {/* Selling Account */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <Label>Tài khoản đăng bán</Label>
-                      <Select value={amzForm.sellingAccountId} onValueChange={(v) => setAmzForm({ ...amzForm, sellingAccountId: v })}>
+                      <Select disabled={!isEditingAmz} value={amzForm.sellingAccountId} onValueChange={(v) => setAmzForm({ ...amzForm, sellingAccountId: v })}>
                         <SelectTrigger><SelectValue placeholder="Chọn tài khoản" /></SelectTrigger>
                         <SelectContent>
                           {sellingAccounts.filter((a) => a.platform === "amazon" && a.status === "active").map((a) => (
@@ -617,7 +1049,7 @@ export default function IdeaDetailPage() {
                     </div>
                     <div className="space-y-1.5">
                       <Label>Trạng thái Listing</Label>
-                      <Select value={amzForm.listingStatus} onValueChange={(v) => setAmzForm({ ...amzForm, listingStatus: v })}>
+                      <Select disabled={!isEditingAmz} value={amzForm.listingStatus} onValueChange={(v) => setAmzForm({ ...amzForm, listingStatus: v })}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {Object.entries(listingStatusLabels).map(([k, v]) => (
@@ -626,65 +1058,105 @@ export default function IdeaDetailPage() {
                         </SelectContent>
                       </Select>
                     </div>
+                    {(amzForm.listingStatus === "error" || amzForm.listingStatus === "delisted") && (
+                      <div className="space-y-1.5 md:col-span-2">
+                        <Label className="text-sm">Lý do {amzForm.listingStatus === "error" ? "lỗi" : "bị gỡ"}</Label>
+                        <Input
+                          disabled={!isEditingAmz}
+                          value={amzForm.listingStatusReason}
+                          onChange={(e) => setAmzForm({ ...amzForm, listingStatusReason: e.target.value })}
+                          placeholder={amzForm.listingStatus === "error" ? "Mô tả lỗi..." : "Lý do sàn gỡ sản phẩm..."}
+                        />
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-1.5">
-                      <Label>ASIN</Label>
-                      <Input value={amzForm.asin} onChange={(e) => setAmzForm({ ...amzForm, asin: e.target.value })} placeholder="B0..." />
+                      <EditableField label="ASIN" value={amzForm.asin} onChange={(v) => setAmzForm({ ...amzForm, asin: v })} isEditing={isEditingAmz} placeholder="B0..." />
+                      {amzForm.asin && !isEditingAmz && (
+                        <a
+                          href={`https://www.amazon.com/dp/${amzForm.asin}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                        >
+                          <ExternalLink className="h-3 w-3" /> Xem trên Amazon
+                        </a>
+                      )}
                     </div>
-                    <div className="space-y-1.5">
-                      <Label>FNSKU Code</Label>
-                      <Input value={amzForm.fnskuCode} onChange={(e) => setAmzForm({ ...amzForm, fnskuCode: e.target.value })} />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>Giá ($)</Label>
-                      <Input type="number" step="0.01" value={amzForm.price} onChange={(e) => setAmzForm({ ...amzForm, price: e.target.value })} />
-                    </div>
+                    <EditableField label="FNSKU Code" value={amzForm.fnskuCode} onChange={(v) => setAmzForm({ ...amzForm, fnskuCode: v })} isEditing={isEditingAmz} />
+                    <EditableField label="Giá ($)" type="number" value={amzForm.price} onChange={(v) => setAmzForm({ ...amzForm, price: v })} isEditing={isEditingAmz} />
                   </div>
 
                   <Separator />
 
-                  <div className="space-y-1.5">
-                    <Label>Item Name (Tiêu đề)</Label>
-                    <Input value={amzForm.itemName} onChange={(e) => setAmzForm({ ...amzForm, itemName: e.target.value })} />
-                  </div>
+                  <EditableField label="Item Name (Tiêu đề)" value={amzForm.itemName} onChange={(v) => setAmzForm({ ...amzForm, itemName: v })} isEditing={isEditingAmz} />
+                  <EditableField label="Item Highlights" value={amzForm.itemHighlights} onChange={(v) => setAmzForm({ ...amzForm, itemHighlights: v })} isEditing={isEditingAmz} />
 
                   <div className="space-y-1.5">
-                    <Label>Item Highlights</Label>
-                    <Input value={amzForm.itemHighlights} onChange={(e) => setAmzForm({ ...amzForm, itemHighlights: e.target.value })} />
+                    <Label className="text-xs font-semibold text-muted-foreground">Bullet Points (tối đa 5)</Label>
+                    <div className="space-y-2">
+                      {amzForm.bulletPoints.map((bp, i) => (
+                        <EditableField
+                          key={i}
+                          value={bp}
+                          onChange={(v) => {
+                            const bps = [...amzForm.bulletPoints];
+                            bps[i] = v;
+                            setAmzForm({ ...amzForm, bulletPoints: bps });
+                          }}
+                          isEditing={isEditingAmz}
+                          placeholder={`Bullet point ${i + 1}`}
+                        />
+                      ))}
+                    </div>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <Label>Bullet Points (tối đa 5)</Label>
-                    {amzForm.bulletPoints.map((bp, i) => (
-                      <Input
-                        key={i}
-                        value={bp}
-                        onChange={(e) => {
-                          const bps = [...amzForm.bulletPoints];
-                          bps[i] = e.target.value;
-                          setAmzForm({ ...amzForm, bulletPoints: bps });
-                        }}
-                        placeholder={`Bullet point ${i + 1}`}
-                        className="text-sm"
-                      />
-                    ))}
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label>Mô tả chi tiết</Label>
-                    <Textarea value={amzForm.description} onChange={(e) => setAmzForm({ ...amzForm, description: e.target.value })} rows={3} />
-                  </div>
+                  <EditableField
+                    label="Mô tả chi tiết"
+                    value={amzForm.description}
+                    onChange={(v) => setAmzForm({ ...amzForm, description: v })}
+                    isEditing={isEditingAmz}
+                    type="textarea"
+                    rows={3}
+                  />
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <EditableField
+                      label="Tags (từ khoá, phân cách bởi dấu chấm phẩy)"
+                      value={amzForm.tags}
+                      onChange={(v) => setAmzForm({ ...amzForm, tags: v })}
+                      isEditing={isEditingAmz}
+                      type="textarea"
+                      rows={2}
+                    />
                     <div className="space-y-1.5">
-                      <Label>Tags (từ khoá, phân cách bởi dấu phẩy)</Label>
-                      <Textarea value={amzForm.tags} onChange={(e) => setAmzForm({ ...amzForm, tags: e.target.value })} rows={2} />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>Slugs (mỗi dòng 1 slug)</Label>
-                      <Textarea value={amzForm.slugs} onChange={(e) => setAmzForm({ ...amzForm, slugs: e.target.value })} rows={2} />
+                      <div className="flex items-center gap-2">
+                        <Label className="text-xs font-semibold text-muted-foreground">Slugs (mỗi dòng 1 slug, tối đa 12)</Label>
+                        {amzForm.slugs && !isEditingAmz && (
+                          <CopyButton text={amzForm.slugs} className="h-4 w-4" />
+                        )}
+                      </div>
+                      {isEditingAmz ? (
+                        <Textarea
+                          value={amzForm.slugs}
+                          onChange={(e) => setAmzForm({ ...amzForm, slugs: e.target.value })}
+                          rows={4}
+                          placeholder="slug-1&#10;slug-2&#10;slug-3"
+                        />
+                      ) : amzForm.slugs ? (
+                        <div className="space-y-1">
+                          {amzForm.slugs.split("\n").filter(Boolean).map((slug, i) => (
+                            <div key={i} className="flex items-center gap-1.5 group/slug">
+                              <code className="text-xs bg-muted px-1.5 py-0.5 rounded flex-1 truncate">{slug}</code>
+                              <CopyButton text={slug} className="h-4 w-4 opacity-0 group-hover/slug:opacity-100 transition-opacity" />
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground italic">Chưa có slug</p>
+                      )}
                     </div>
                   </div>
 
@@ -692,30 +1164,32 @@ export default function IdeaDetailPage() {
 
                   {/* Gallery images */}
                   <div className="space-y-1.5">
-                    <div className="flex items-center gap-3 mb-2">
-                      <Checkbox
-                        id="amz-shared-main"
-                        checked={amzForm.useSharedMainImage}
-                        onCheckedChange={(v) => setAmzForm({ ...amzForm, useSharedMainImage: !!v })}
-                      />
-                      <Label htmlFor="amz-shared-main" className="text-sm cursor-pointer">
-                        Dùng ảnh main chung (ảnh đầu gallery = ảnh main)
-                      </Label>
-                    </div>
+                    {isEditingAmz && (
+                      <div className="flex items-center gap-3 mb-2">
+                        <Checkbox
+                          id="amz-shared-main"
+                          checked={amzForm.useSharedMainImage}
+                          onCheckedChange={(v) => setAmzForm({ ...amzForm, useSharedMainImage: !!v })}
+                        />
+                        <Label htmlFor="amz-shared-main" className="text-sm cursor-pointer">
+                          Dùng ảnh main chung (ảnh đầu gallery = ảnh main)
+                        </Label>
+                      </div>
+                    )}
                     <Label>Gallery Images (Google Drive links, tối đa 9)</Label>
                     {amzForm.galleryImages.map((img, i) => (
                       <div key={i} className="flex gap-2">
-                        <Input
+                        <ImagePreviewInput
                           value={img}
-                          onChange={(e) => {
+                          onChange={(val) => {
                             const imgs = [...amzForm.galleryImages];
-                            imgs[i] = e.target.value;
+                            imgs[i] = val;
                             setAmzForm({ ...amzForm, galleryImages: imgs });
                           }}
                           placeholder="https://drive.google.com/..."
                           className="text-sm"
                         />
-                        {amzForm.galleryImages.length > 1 && (
+                        {isEditingAmz && amzForm.galleryImages.length > 1 && (
                           <Button
                             type="button"
                             variant="ghost"
@@ -732,7 +1206,7 @@ export default function IdeaDetailPage() {
                         )}
                       </div>
                     ))}
-                    {amzForm.galleryImages.length < 9 && (
+                    {isEditingAmz && amzForm.galleryImages.length < 9 && (
                       <Button
                         type="button"
                         variant="outline"
@@ -745,26 +1219,16 @@ export default function IdeaDetailPage() {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <EditableField label="Video URL" value={amzForm.videoUrl} onChange={(v) => setAmzForm({ ...amzForm, videoUrl: v })} isEditing={isEditingAmz} />
                     <div className="space-y-1.5">
-                      <Label>Video URL</Label>
-                      <Input value={amzForm.videoUrl} onChange={(e) => setAmzForm({ ...amzForm, videoUrl: e.target.value })} />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>Content A+ URL</Label>
-                      <Input value={amzForm.contentAPlusUrl} onChange={(e) => setAmzForm({ ...amzForm, contentAPlusUrl: e.target.value })} />
+                      <Label>Content A+ URL (Ảnh)</Label>
+                      <ImagePreviewInput value={amzForm.contentAPlusUrl} onChange={(val) => setAmzForm({ ...amzForm, contentAPlusUrl: val })} readOnly={!isEditingAmz} />
                     </div>
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label>FNSKU Label File URL</Label>
-                    <Input value={amzForm.fnskuLabelFileUrl} onChange={(e) => setAmzForm({ ...amzForm, fnskuLabelFileUrl: e.target.value })} />
-                  </div>
-
-                  <div className="flex justify-end">
-                    <Button onClick={handleSaveAmazon} disabled={saving}>
-                      {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                      Lưu Amazon Listing
-                    </Button>
+                    <Label>FNSKU Label File URL (Ảnh hoặc PDF)</Label>
+                    <ImagePreviewInput value={amzForm.fnskuLabelFileUrl} onChange={(val) => setAmzForm({ ...amzForm, fnskuLabelFileUrl: val })} readOnly={!isEditingAmz} />
                   </div>
                 </CardContent>
               </Card>
@@ -773,18 +1237,36 @@ export default function IdeaDetailPage() {
             {/* Etsy Listing Tab */}
             <TabsContent value="etsy" className="mt-4 space-y-4">
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    Etsy Listing
-                    {idea.etsyListing && statusBadge(idea.etsyListing.listingStatus, listingStatusLabels)}
-                  </CardTitle>
-                  <CardDescription>Điền thông tin sản phẩm trên Etsy</CardDescription>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      Etsy Listing
+                      {idea.etsyListing && statusBadge(idea.etsyListing.listingStatus, listingStatusLabels)}
+                    </CardTitle>
+                    <CardDescription>Điền thông tin sản phẩm trên Etsy</CardDescription>
+                  </div>
+                  <div>
+                    {!isEditingEtsy ? (
+                      <Button variant="ghost" size="sm" onClick={() => setIsEditingEtsy(true)}>
+                        <Pencil className="h-4 w-4 mr-2" /> Chỉnh sửa
+                      </Button>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={() => setIsEditingEtsy(false)}>
+                          <X className="h-4 w-4 mr-2" /> Huỷ
+                        </Button>
+                        <Button size="sm" onClick={handleSaveEtsy} disabled={saving}>
+                          <Save className="h-4 w-4 mr-2" /> Lưu
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <Label>Tài khoản đăng bán</Label>
-                      <Select value={etsyForm.sellingAccountId} onValueChange={(v) => setEtsyForm({ ...etsyForm, sellingAccountId: v })}>
+                      <Select disabled={!isEditingEtsy} value={etsyForm.sellingAccountId} onValueChange={(v) => setEtsyForm({ ...etsyForm, sellingAccountId: v })}>
                         <SelectTrigger><SelectValue placeholder="Chọn tài khoản" /></SelectTrigger>
                         <SelectContent>
                           {sellingAccounts.filter((a) => a.platform === "etsy" && a.status === "active").map((a) => (
@@ -795,7 +1277,7 @@ export default function IdeaDetailPage() {
                     </div>
                     <div className="space-y-1.5">
                       <Label>Trạng thái Listing</Label>
-                      <Select value={etsyForm.listingStatus} onValueChange={(v) => setEtsyForm({ ...etsyForm, listingStatus: v })}>
+                      <Select disabled={!isEditingEtsy} value={etsyForm.listingStatus} onValueChange={(v) => setEtsyForm({ ...etsyForm, listingStatus: v })}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {Object.entries(listingStatusLabels).map(([k, v]) => (
@@ -804,47 +1286,50 @@ export default function IdeaDetailPage() {
                         </SelectContent>
                       </Select>
                     </div>
+                    {(etsyForm.listingStatus === "error" || etsyForm.listingStatus === "delisted") && (
+                      <div className="space-y-1.5 md:col-span-2">
+                        <Label className="text-sm">Lý do {etsyForm.listingStatus === "error" ? "lỗi" : "bị gỡ"}</Label>
+                        <Input
+                          disabled={!isEditingEtsy}
+                          value={etsyForm.listingStatusReason}
+                          onChange={(e) => setEtsyForm({ ...etsyForm, listingStatusReason: e.target.value })}
+                          placeholder={etsyForm.listingStatus === "error" ? "Mô tả lỗi..." : "Lý do sàn gỡ sản phẩm..."}
+                        />
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <Label>Listing ID (Etsy)</Label>
-                      <Input value={etsyForm.listingId} onChange={(e) => setEtsyForm({ ...etsyForm, listingId: e.target.value })} />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>Giá ($)</Label>
-                      <Input type="number" step="0.01" value={etsyForm.price} onChange={(e) => setEtsyForm({ ...etsyForm, price: e.target.value })} />
-                    </div>
+                    <EditableField label="Listing ID (Etsy)" value={etsyForm.listingId} onChange={(v) => setEtsyForm({ ...etsyForm, listingId: v })} isEditing={isEditingEtsy} />
+                    <EditableField label="Giá ($)" type="number" value={etsyForm.price} onChange={(v) => setEtsyForm({ ...etsyForm, price: v })} isEditing={isEditingEtsy} />
                   </div>
 
-                  <div className="space-y-1.5">
-                    <Label>Tiêu đề</Label>
-                    <Input value={etsyForm.title} onChange={(e) => setEtsyForm({ ...etsyForm, title: e.target.value })} />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label>Mô tả</Label>
-                    <Textarea value={etsyForm.description} onChange={(e) => setEtsyForm({ ...etsyForm, description: e.target.value })} rows={4} />
-                  </div>
+                  <EditableField label="Tiêu đề" value={etsyForm.title} onChange={(v) => setEtsyForm({ ...etsyForm, title: v })} isEditing={isEditingEtsy} />
+                  <EditableField label="Mô tả" value={etsyForm.description} onChange={(v) => setEtsyForm({ ...etsyForm, description: v })} isEditing={isEditingEtsy} type="textarea" rows={4} />
 
                   {/* Tags with chips */}
                   <div className="space-y-1.5">
-                    <Label>Tags (tối đa 13, mỗi tag tối đa 20 ký tự)</Label>
+                    <div className="flex items-center gap-2">
+                      <Label>Tags (tối đa 13, mỗi tag tối đa 20 ký tự)</Label>
+                      <CopyButton text={etsyForm.tags.join(", ")} className="h-5 w-5" />
+                    </div>
                     <div className="flex flex-wrap gap-1.5 mb-2">
                       {etsyForm.tags.map((tag, i) => (
                         <Badge key={i} variant="secondary" className="gap-1">
                           {tag}
-                          <button
-                            type="button"
-                            onClick={() => setEtsyForm({ ...etsyForm, tags: etsyForm.tags.filter((_, j) => j !== i) })}
-                            className="hover:text-destructive"
-                          >
-                            ×
-                          </button>
+                          {isEditingEtsy && (
+                            <button
+                              type="button"
+                              onClick={() => setEtsyForm({ ...etsyForm, tags: etsyForm.tags.filter((_, j) => j !== i) })}
+                              className="hover:text-destructive"
+                            >
+                              ×
+                            </button>
+                          )}
                         </Badge>
                       ))}
                     </div>
-                    {etsyForm.tags.length < 13 && (
+                    {isEditingEtsy && etsyForm.tags.length < 13 && (
                       <Input
                         value={etsyForm.tagsInput}
                         onChange={(e) => setEtsyForm({ ...etsyForm, tagsInput: e.target.value })}
@@ -872,50 +1357,74 @@ export default function IdeaDetailPage() {
 
                   {/* Gallery */}
                   <div className="space-y-2">
-                    <div className="flex items-center gap-3">
-                      <Checkbox
-                        id="etsy-shared-gallery"
-                        checked={etsyForm.useSharedGallery}
-                        onCheckedChange={(v) => setEtsyForm({ ...etsyForm, useSharedGallery: !!v })}
-                      />
-                      <Label htmlFor="etsy-shared-gallery" className="text-sm cursor-pointer">
-                        Dùng chung gallery ảnh Amazon
-                      </Label>
-                    </div>
+                    {isEditingEtsy && (
+                      <div className="flex items-center gap-3">
+                        <Checkbox
+                          id="etsy-shared-gallery"
+                          checked={etsyForm.useSharedGallery}
+                          onCheckedChange={(v) => setEtsyForm({ ...etsyForm, useSharedGallery: !!v })}
+                        />
+                        <Label htmlFor="etsy-shared-gallery" className="text-sm cursor-pointer">
+                          Dùng chung gallery ảnh Amazon
+                        </Label>
+                      </div>
+                    )}
 
-                    {!etsyForm.useSharedGallery && (
+                    {etsyForm.useSharedGallery ? (
+                      /* Show Amazon gallery images as read-only reference */
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Ảnh từ Amazon (dùng chung)</Label>
+                        {amzForm.galleryImages.filter(Boolean).length > 0 ? (
+                          amzForm.galleryImages.filter(Boolean).map((img, i) => (
+                            <div key={i} className="flex gap-2">
+                              <ImagePreviewInput
+                                value={img}
+                                onChange={() => {}}
+                                readOnly
+                                className="text-sm opacity-70"
+                              />
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-xs text-muted-foreground italic">Chưa có ảnh Amazon nào. Hãy thêm ảnh ở tab Amazon trước.</p>
+                        )}
+                      </div>
+                    ) : (
                       <>
-                        <div className="flex items-center gap-3">
-                          <Checkbox
-                            id="etsy-shared-main"
-                            checked={etsyForm.useSharedMainImage}
-                            onCheckedChange={(v) => setEtsyForm({ ...etsyForm, useSharedMainImage: !!v })}
-                          />
-                          <Label htmlFor="etsy-shared-main" className="text-sm cursor-pointer">
-                            Dùng ảnh main chung
-                          </Label>
-                        </div>
+                        {isEditingEtsy && (
+                          <div className="flex items-center gap-3">
+                            <Checkbox
+                              id="etsy-shared-main"
+                              checked={etsyForm.useSharedMainImage}
+                              onCheckedChange={(v) => setEtsyForm({ ...etsyForm, useSharedMainImage: !!v })}
+                            />
+                            <Label htmlFor="etsy-shared-main" className="text-sm cursor-pointer">
+                              Dùng ảnh main chung
+                            </Label>
+                          </div>
+                        )}
                         <Label>Gallery Images</Label>
                         {etsyForm.galleryImages.map((img, i) => (
                           <div key={i} className="flex gap-2">
-                            <Input
+                            <ImagePreviewInput
                               value={img}
-                              onChange={(e) => {
+                              onChange={(val) => {
                                 const imgs = [...etsyForm.galleryImages];
-                                imgs[i] = e.target.value;
+                                imgs[i] = val;
                                 setEtsyForm({ ...etsyForm, galleryImages: imgs });
                               }}
                               placeholder="https://drive.google.com/..."
                               className="text-sm"
+                              readOnly={!isEditingEtsy}
                             />
-                            {etsyForm.galleryImages.length > 1 && (
+                            {isEditingEtsy && etsyForm.galleryImages.length > 1 && (
                               <Button type="button" variant="ghost" size="icon" onClick={() => setEtsyForm({ ...etsyForm, galleryImages: etsyForm.galleryImages.filter((_, j) => j !== i) })}>
                                 <XCircle className="h-4 w-4" />
                               </Button>
                             )}
                           </div>
                         ))}
-                        {etsyForm.galleryImages.length < 9 && (
+                        {isEditingEtsy && etsyForm.galleryImages.length < 9 && (
                           <Button type="button" variant="outline" size="sm" onClick={() => setEtsyForm({ ...etsyForm, galleryImages: [...etsyForm.galleryImages, ""] })}>
                             + Thêm ảnh
                           </Button>
@@ -925,30 +1434,33 @@ export default function IdeaDetailPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <div className="flex items-center gap-3">
-                      <Checkbox
-                        id="etsy-amz-video"
-                        checked={etsyForm.useAmazonVideo}
-                        onCheckedChange={(v) => setEtsyForm({ ...etsyForm, useAmazonVideo: !!v })}
-                      />
-                      <Label htmlFor="etsy-amz-video" className="text-sm cursor-pointer">
-                        Dùng video Amazon
-                      </Label>
-                    </div>
-                    {!etsyForm.useAmazonVideo && (
-                      <div className="space-y-1.5">
-                        <Label>Video URL</Label>
-                        <Input value={etsyForm.videoUrl} onChange={(e) => setEtsyForm({ ...etsyForm, videoUrl: e.target.value })} />
+                    {isEditingEtsy && (
+                      <div className="flex items-center gap-3">
+                        <Checkbox
+                          id="etsy-amz-video"
+                          checked={etsyForm.useAmazonVideo}
+                          onCheckedChange={(v) => setEtsyForm({ ...etsyForm, useAmazonVideo: !!v })}
+                        />
+                        <Label htmlFor="etsy-amz-video" className="text-sm cursor-pointer">
+                          Dùng video Amazon
+                        </Label>
                       </div>
                     )}
+                    {!etsyForm.useAmazonVideo && (
+                      <EditableField label="Video URL" value={etsyForm.videoUrl} onChange={(v) => setEtsyForm({ ...etsyForm, videoUrl: v })} isEditing={isEditingEtsy} />
+                    )}
                   </div>
-
-                  <div className="flex justify-end">
-                    <Button onClick={handleSaveEtsy} disabled={saving}>
-                      {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                      Lưu Etsy Listing
-                    </Button>
-                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+            {/* History Tab */}
+            <TabsContent value="history" className="mt-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Lịch sử thay đổi</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <AuditLogViewer ideaId={id} />
                 </CardContent>
               </Card>
             </TabsContent>
