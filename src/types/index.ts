@@ -1,8 +1,11 @@
 import type { Role } from "@/lib/permissions";
 
 // Idea statuses
-export const IDEA_STATUSES = ["reviewing", "approved", "published"] as const;
+export const IDEA_STATUSES = ["reviewing", "approved", "published", "rejected"] as const;
 export type IdeaStatus = (typeof IDEA_STATUSES)[number];
+
+export const IDEA_TABS = ["all", "reviewing", "photos", "ready", "published", "rejected"] as const;
+export type IdeaTab = (typeof IDEA_TABS)[number];
 
 export const PHOTO_STATUSES = [
   "not_requested",
@@ -64,6 +67,7 @@ export const ideaStatusLabels: Record<IdeaStatus, string> = {
   reviewing: "Đang xem xét",
   approved: "Đã được duyệt",
   published: "Đã đăng bán",
+  rejected: "Đã bị từ chối",
 };
 
 export const photoStatusLabels: Record<PhotoStatus, string> = {
