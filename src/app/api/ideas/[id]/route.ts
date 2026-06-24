@@ -154,6 +154,20 @@ export async function PATCH(
       updateData.productionFileUrl = body.productionFileUrl;
     }
 
+    // Partner fields
+    if (body.partnerName !== undefined) {
+      updateData.partnerName = body.partnerName;
+    }
+    if (body.partnerLabel !== undefined) {
+      updateData.partnerLabel = body.partnerLabel;
+    }
+
+    // Dimensions & material
+    if (body.widthCm !== undefined) { updateData.widthCm = body.widthCm; }
+    if (body.heightCm !== undefined) { updateData.heightCm = body.heightCm; }
+    if (body.thicknessMm !== undefined) { updateData.thicknessMm = body.thicknessMm; }
+    if (body.material !== undefined) { updateData.material = body.material; }
+
     // Title / Description and core fields
     let coreEdited = false;
     if (body.title !== undefined) { updateData.title = body.title; coreEdited = true; }

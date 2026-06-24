@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -17,7 +18,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -30,6 +33,12 @@ import {
   Search,
   Eye,
   Loader2,
+  CheckCheck,
+  Image as ImageIcon,
+  FileText,
+  X,
+  Printer,
+  ExternalLink,
 } from "lucide-react";
 import {
   Dialog,
@@ -39,6 +48,15 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { CopyButton } from "@/components/copy-button";
+import { MonthPicker } from "@/components/month-picker";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import {
   ideaStatusLabels,
   photoStatusLabels,
@@ -93,10 +111,31 @@ interface IdeaRow {
   createdAt: string;
   title: string | null;
   needsReReview: boolean;
+  source: string;
+  partnerName: string | null;
 }
 
-function IdeaTable({ ideas, loading }: { ideas: IdeaRow[]; loading: boolean }) {
+function getSourceBadge(source: string) {
+  switch (source) {
+    case "boss":
+      return <Badge variant="default" className="bg-purple-600 hover:bg-purple-700 text-xs">Sếp</Badge>;
+    case "partner":
+      return <Badge variant="secondary" className="bg-orange-100 text-orange-800 hover:bg-orange-200 text-xs">Đối tác</Badge>;
+    default:
+      return null; // employee - no badge needed
+  }
+}
+
+function IdeaTable({ ideas, loading, selectedIds, onSelectionChange, canSelect }: {
+  ideas: IdeaRow[];
+  loading: boolean;
+  selectedIds: Set<string>;
+  onSelectionChange: (id: string, checked: boolean) => void;
+  canSelect: boolean;
+}) {
   const router = useRouter();
+  const allSelected = ideas.length > 0 && ideas.every((i) => selectedIds.has(i.id));
+  const someSelected = ideas.some((i) => selectedIds.has(i.id));
 
   if (loading) {
     return (
@@ -108,7 +147,7 @@ function IdeaTable({ ideas, loading }: { ideas: IdeaRow[]; loading: boolean }) {
 
   if (ideas.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
+      <div className="flex flex-col items-center justify-center py-12 text-center animate-in fade-in duration-500">
         <div className="rounded-full bg-muted p-4 mb-4">
           <Eye className="h-8 w-8 text-muted-foreground" />
         </div>
@@ -125,6 +164,16 @@ function IdeaTable({ ideas, loading }: { ideas: IdeaRow[]; loading: boolean }) {
       <Table>
         <TableHeader>
           <TableRow>
+            {canSelect && (
+              <TableHead className="w-[40px]">
+                <Checkbox
+                  checked={allSelected}
+                  onCheckedChange={(checked) => {
+                    ideas.forEach((i) => onSelectionChange(i.id, !!checked));
+                  }}
+                />
+              </TableHead>
+            )}
             <TableHead className="w-[60px]">Ảnh</TableHead>
             <TableHead>MSKU</TableHead>
             <TableHead className="hidden md:table-cell">Chủ đề</TableHead>
@@ -144,6 +193,14 @@ function IdeaTable({ ideas, loading }: { ideas: IdeaRow[]; loading: boolean }) {
                 className="cursor-pointer hover:bg-muted/50 group/row"
                 onClick={() => router.push(`/ideas/${idea.id}`)}
               >
+                {canSelect && (
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <Checkbox
+                      checked={selectedIds.has(idea.id)}
+                      onCheckedChange={(checked) => onSelectionChange(idea.id, !!checked)}
+                    />
+                  </TableCell>
+                )}
                 <TableCell>
                   {thumbUrl ? (
                     <Dialog>
@@ -193,6 +250,7 @@ function IdeaTable({ ideas, loading }: { ideas: IdeaRow[]; loading: boolean }) {
                 <TableCell>
                   <div className="flex flex-col items-start gap-1">
                     {getStatusBadge(idea.status)}
+                    {getSourceBadge(idea.source)}
                     {idea.needsReReview && (
                       <Badge variant="destructive" className="bg-red-500 text-white animate-pulse text-[10px] px-1 py-0 h-4">
                         Sửa đổi mới
@@ -216,12 +274,16 @@ function IdeaTable({ ideas, loading }: { ideas: IdeaRow[]; loading: boolean }) {
 export default function IdeasPage() {
   const { data: session } = useSession();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const role = session?.user?.role as Role | undefined;
   const isEmployee = role === "employee";
+  const sessionReady = !!session?.user;
 
   const urlTab = searchParams.get("tab") || "reviewing";
+  const urlMine = searchParams.get("mine");
   const [search, setSearch] = useState("");
-  const [showMine, setShowMine] = useState(isEmployee);
+  // Read toggle from URL if present, otherwise default by role
+  const [showMine, setShowMine] = useState(urlMine !== null ? urlMine === "true" : !!isEmployee);
   const [activeTab, setActiveTab] = useState(urlTab);
   const [ideas, setIdeas] = useState<IdeaRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -229,43 +291,129 @@ export default function IdeasPage() {
   const [month, setMonth] = useState("");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [topics, setTopics] = useState<any[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [batchProcessing, setBatchProcessing] = useState(false);
+  const [labelDialogOpen, setLabelDialogOpen] = useState(false);
+  const [labelSkusInput, setLabelSkusInput] = useState("");
+  const [labelResults, setLabelResults] = useState<any[]>([]);
+  const [labelLoading, setLabelLoading] = useState(false);
+  const [labelQuantities, setLabelQuantities] = useState<Record<string, number>>({});
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const pageSize = 20;
+  const canSelect = true; // All roles can select for label printing etc.
+
+  const handleSelectionChange = useCallback((id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
+
+  const handleBatchAction = async (action: string) => {
+    if (selectedIds.size === 0) return;
+    setBatchProcessing(true);
+    try {
+      const res = await fetch("/api/ideas/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds), action }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        const toast = (await import("sonner")).toast;
+        toast.success(`Đã ${action === "approve" ? "duyệt" : action === "request_photos" ? "yêu cầu làm ảnh" : "yêu cầu làm file"} ${data.successCount}/${data.totalCount} ý tưởng`);
+        setSelectedIds(new Set());
+        fetchIdeas();
+      }
+    } catch {
+      console.error("Batch action failed");
+    } finally {
+      setBatchProcessing(false);
+    }
+  };
+
+  const handleLabelSearch = async () => {
+    const skus = labelSkusInput.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean);
+    if (skus.length === 0) return;
+    setLabelLoading(true);
+    try {
+      const res = await fetch("/api/ideas/labels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ skus, quantities: labelQuantities }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setLabelResults(data);
+        const qty: Record<string, number> = {};
+        data.forEach((item: any) => { qty[item.id] = item.quantity || 1; });
+        setLabelQuantities(qty);
+      }
+    } catch { console.error("Label search failed"); }
+    finally { setLabelLoading(false); }
+  };
+
+  const handleOpenAllLabels = () => {
+    labelResults.forEach((item) => {
+      if (item.fnskuLabelFileUrl) {
+        window.open(item.fnskuLabelFileUrl, "_blank");
+      }
+    });
+  };
 
   // Fetch topics for filter
   useEffect(() => {
     fetch("/api/topics").then(r => r.json()).then(setTopics).catch(() => {});
   }, []);
 
-  // Sync URL tab param when it changes
+  // Sync URL params when they change (tab + mine toggle)
   useEffect(() => {
     const newTab = searchParams.get("tab") || "reviewing";
     setActiveTab(newTab);
+    const newMine = searchParams.get("mine");
+    if (newMine !== null) {
+      setShowMine(newMine === "true");
+    }
   }, [searchParams]);
 
-  // Sync showMine with role changes
-  useEffect(() => {
-    setShowMine(isEmployee);
-  }, [isEmployee]);
-
   const fetchIdeas = useCallback(async () => {
+    if (!sessionReady) return;
     setLoading(true);
     try {
-      const params = new URLSearchParams({ tab: activeTab });
+      const params = new URLSearchParams({ tab: activeTab, page: String(page), pageSize: String(pageSize) });
       if (search) params.set("search", search);
-      if (showMine) params.set("mine", "true");
-      if (topicId) params.set("topicId", topicId);
+      // Employee defaults to mine=true, but can toggle off to see all
+      const effectiveMine = showMine;
+      if (effectiveMine) params.set("mine", "true");
+      if (topicId && topicId !== "all") params.set("topicId", topicId);
       if (month) params.set("month", month);
 
       const res = await fetch(`/api/ideas?${params.toString()}`);
       if (res.ok) {
-        const data = await res.json();
-        setIdeas(data);
+        const json = await res.json();
+        setIdeas(json.data || json);
+        setTotal(json.total || (json.data || json).length);
+        setTotalPages(json.totalPages || 1);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        // Invalid tab → silently redirect to default, no toast
+        if (res.status === 400 && err.error?.includes("Invalid tab")) {
+          setActiveTab("reviewing");
+          const params = new URLSearchParams(searchParams.toString());
+          params.set("tab", "reviewing");
+          router.replace(`/ideas?${params.toString()}`, { scroll: false });
+        }
       }
     } catch {
       console.error("Failed to fetch ideas");
     } finally {
       setLoading(false);
     }
-  }, [activeTab, search, showMine, topicId, month]);
+  }, [activeTab, search, showMine, topicId, month, page, pageSize, isEmployee, sessionReady]);
 
   useEffect(() => {
     fetchIdeas();
@@ -276,9 +424,9 @@ export default function IdeasPage() {
     const timer = setTimeout(() => {
       if (search && activeTab !== "all") {
         setActiveTab("all");
-      } else {
-        fetchIdeas();
       }
+      setPage(1);
+      fetchIdeas();
     }, 300);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -294,12 +442,14 @@ export default function IdeasPage() {
             Theo dõi toàn bộ ý tưởng từ đề xuất đến đăng bán
           </p>
         </div>
-        <Button asChild>
-          <Link href="/ideas/new">
-            <Plus className="mr-2 h-4 w-4" />
-            Tạo ý tưởng
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button asChild>
+            <Link href="/ideas/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Tạo ý tưởng
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Filters Bar */}
@@ -314,7 +464,7 @@ export default function IdeasPage() {
           />
         </div>
 
-        <Select value={topicId} onValueChange={setTopicId}>
+        <Select value={topicId} onValueChange={(v) => { setTopicId(v); setPage(1); }}>
           <SelectTrigger className="w-[150px] h-9 text-xs">
             <SelectValue placeholder="Chủ đề" />
           </SelectTrigger>
@@ -326,18 +476,20 @@ export default function IdeasPage() {
           </SelectContent>
         </Select>
 
-        <Input
-          type="month"
-          value={month}
-          onChange={(e) => setMonth(e.target.value)}
-          className="w-[160px] h-9 text-xs"
-        />
+        <MonthPicker value={month} onChange={(v) => { setMonth(v); setPage(1); }} />
 
         <div className="flex items-center gap-2 ml-auto">
           <Switch
             id="show-mine"
             checked={showMine}
-            onCheckedChange={setShowMine}
+            onCheckedChange={(v) => {
+              setShowMine(v);
+              setPage(1);
+              const params = new URLSearchParams(searchParams.toString());
+              if (v) params.set("mine", "true");
+              else params.set("mine", "false");
+              router.replace(`/ideas?${params.toString()}`, { scroll: false });
+            }}
           />
           <Label htmlFor="show-mine" className="text-sm cursor-pointer">
             Của tôi
@@ -345,8 +497,70 @@ export default function IdeasPage() {
         </div>
       </div>
 
+      {/* Batch Action Bar - Floating bottom */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-background border shadow-lg rounded-full px-5 py-3 animate-in fade-in slide-in-from-bottom-4">
+          <span className="text-sm font-medium whitespace-nowrap">{selectedIds.size} đã chọn</span>
+          <Separator orientation="vertical" className="h-5" />
+          <div className="flex items-center gap-1.5">
+            {!isEmployee && activeTab === "reviewing" && (
+              <Button size="sm" variant="default" onClick={() => handleBatchAction("approve")} disabled={batchProcessing} className="rounded-full">
+                <CheckCheck className="h-4 w-4 mr-1" /> Duyệt
+              </Button>
+            )}
+            {!isEmployee && (
+              <>
+                <Button size="sm" variant="outline" onClick={() => handleBatchAction("request_photos")} disabled={batchProcessing} className="rounded-full">
+                  <ImageIcon className="h-4 w-4 mr-1" /> Ảnh
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => handleBatchAction("request_file")} disabled={batchProcessing} className="rounded-full">
+                  <FileText className="h-4 w-4 mr-1" /> File
+                </Button>
+              </>
+            )}
+            <Button size="sm" variant="outline" onClick={() => {
+              const selectedIdeas = ideas.filter(i => selectedIds.has(i.id));
+              const skus = selectedIdeas.map(i => i.msku).join("\n");
+              setLabelSkusInput(skus);
+              setLabelDialogOpen(true);
+              // Auto-search after dialog opens
+              setTimeout(async () => {
+                setLabelLoading(true);
+                try {
+                  const res = await fetch("/api/ideas/labels", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ skus: selectedIdeas.map(i => i.msku) }),
+                  });
+                  if (res.ok) {
+                    const data = await res.json();
+                    setLabelResults(data);
+                    const qty: Record<string, number> = {};
+                    data.forEach((item: any) => { qty[item.id] = item.quantity || 1; });
+                    setLabelQuantities(qty);
+                  }
+                } catch { console.error("Label search failed"); }
+                finally { setLabelLoading(false); }
+              }, 100);
+            }} disabled={batchProcessing} className="rounded-full">
+              <Printer className="h-4 w-4 mr-1" /> In Label
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())} disabled={batchProcessing} className="rounded-full">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <Tabs value={activeTab} onValueChange={(tab) => {
+        setActiveTab(tab);
+        setPage(1);
+        setSelectedIds(new Set());
+        const params = new URLSearchParams(searchParams.toString());
+        params.set("tab", tab);
+        router.replace(`/ideas?${params.toString()}`, { scroll: false });
+      }} className="w-full">
         <TabsList className="flex w-full overflow-x-auto justify-start border-b rounded-none h-auto p-0 bg-transparent">
           <TabsTrigger value="all" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2">
             Tất cả
@@ -369,25 +583,161 @@ export default function IdeasPage() {
         </TabsList>
 
         <TabsContent value="all" className="mt-4">
-          <IdeaTable ideas={ideas} loading={loading} />
+          <IdeaTable ideas={ideas} loading={loading} selectedIds={selectedIds} onSelectionChange={handleSelectionChange} canSelect={canSelect} />
         </TabsContent>
 
         <TabsContent value="reviewing" className="mt-4">
-          <IdeaTable ideas={ideas} loading={loading} />
+          <IdeaTable ideas={ideas} loading={loading} selectedIds={selectedIds} onSelectionChange={handleSelectionChange} canSelect={canSelect} />
         </TabsContent>
         <TabsContent value="photos" className="mt-4">
-          <IdeaTable ideas={ideas} loading={loading} />
+          <IdeaTable ideas={ideas} loading={loading} selectedIds={selectedIds} onSelectionChange={handleSelectionChange} canSelect={canSelect} />
         </TabsContent>
         <TabsContent value="ready" className="mt-4">
-          <IdeaTable ideas={ideas} loading={loading} />
+          <IdeaTable ideas={ideas} loading={loading} selectedIds={selectedIds} onSelectionChange={handleSelectionChange} canSelect={canSelect} />
         </TabsContent>
         <TabsContent value="published" className="mt-4">
-          <IdeaTable ideas={ideas} loading={loading} />
+          <IdeaTable ideas={ideas} loading={loading} selectedIds={selectedIds} onSelectionChange={handleSelectionChange} canSelect={canSelect} />
         </TabsContent>
         <TabsContent value="rejected" className="mt-4">
-          <IdeaTable ideas={ideas} loading={loading} />
+          <IdeaTable ideas={ideas} loading={loading} selectedIds={selectedIds} onSelectionChange={handleSelectionChange} canSelect={canSelect} />
         </TabsContent>
       </Tabs>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-2">
+          <span className="text-sm text-muted-foreground">{total} ý tưởng</span>
+          <Pagination>
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  className={page <= 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                />
+              </PaginationItem>
+              {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                let pageNum: number;
+                if (totalPages <= 7) {
+                  pageNum = i + 1;
+                } else if (page <= 4) {
+                  pageNum = i + 1;
+                } else if (page >= totalPages - 3) {
+                  pageNum = totalPages - 6 + i;
+                } else {
+                  pageNum = page - 3 + i;
+                }
+                return (
+                  <PaginationItem key={pageNum}>
+                    <PaginationLink
+                      onClick={() => setPage(pageNum)}
+                      isActive={pageNum === page}
+                    >
+                      {pageNum}
+                    </PaginationLink>
+                  </PaginationItem>
+                );
+              })}
+              <PaginationItem>
+                <PaginationNext
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  className={page >= totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+        </div>
+      )}
+
+      {/* Label Print Dialog */}
+      <Dialog open={labelDialogOpen} onOpenChange={setLabelDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Printer className="h-5 w-5" /> In Label
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 flex-1 overflow-hidden flex flex-col">
+            {labelLoading && (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            )}
+            {labelResults.length > 0 && (
+              <>
+                <div className="rounded-md border overflow-auto flex-1">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[60px]">Ảnh</TableHead>
+                        <TableHead>MSKU</TableHead>
+                        <TableHead className="w-[80px]">SL</TableHead>
+                        <TableHead>FNSKU</TableHead>
+                        <TableHead className="w-[80px]">In</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {labelResults.map((item) => {
+                        const previewUrl = convertToDirectImageUrl(item.fnskuLabelFileUrl);
+                        return (
+                        <TableRow key={item.id}>
+                          <TableCell>
+                            {previewUrl ? (
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <div className="w-14 h-10 rounded border overflow-hidden bg-white cursor-pointer hover:ring-2 hover:ring-primary/50">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img src={previewUrl} alt={item.msku} className="w-full h-full object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                                  </div>
+                                </DialogTrigger>
+                                <DialogContent className="max-w-[90vw] max-h-[90vh] bg-transparent border-none shadow-none p-0" showCloseButton={false}>
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={previewUrl} alt={item.msku} className="max-w-[90vw] max-h-[90vh] object-contain rounded-md" />
+                                </DialogContent>
+                              </Dialog>
+                            ) : (
+                              <div className="w-14 h-10 rounded border bg-muted flex items-center justify-center text-[10px] text-muted-foreground">—</div>
+                            )}
+                          </TableCell>
+                          <TableCell className="font-mono text-sm">{item.msku}</TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={999}
+                              className="w-16 h-8 text-sm text-center"
+                              value={labelQuantities[item.id] || 1}
+                              onChange={(e) => setLabelQuantities({ ...labelQuantities, [item.id]: parseInt(e.target.value) || 1 })}
+                            />
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">{item.fnskuCode || "—"}</TableCell>
+                          <TableCell>
+                            {item.fnskuLabelFileUrl ? (
+                              <Button variant="ghost" size="sm" asChild>
+                                <a href={item.fnskuLabelFileUrl} target="_blank" rel="noopener noreferrer">
+                                  <ExternalLink className="h-4 w-4" />
+                                </a>
+                              </Button>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">Chưa có</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">{labelResults.length} sản phẩm</span>
+                  <Button variant="default" onClick={handleOpenAllLabels} disabled={!labelResults.some((i: any) => i.fnskuLabelFileUrl)}>
+                    <Printer className="h-4 w-4 mr-2" /> Mở tất cả label
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

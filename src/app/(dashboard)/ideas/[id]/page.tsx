@@ -35,6 +35,7 @@ import {
 import {
   ArrowLeft,
   Check,
+  Copy,
   Download,
   ExternalLink,
   Image as ImageIcon,
@@ -50,6 +51,7 @@ import {
   FileText,
   Upload,
   ShoppingBag,
+  Printer,
 } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
 import { EditableField } from "@/components/editable-field";
@@ -108,6 +110,11 @@ export default function IdeaDetailPage() {
   const [saving, setSaving] = useState(false);
   const [reviewComment, setReviewComment] = useState("");
   const [actionType, setActionType] = useState<"approve" | "reject" | "revise" | null>(null);
+  const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
+  const [cloneType, setCloneType] = useState<"normal" | "partner">("normal");
+  const [clonePartnerName, setClonePartnerName] = useState("");
+  const [clonePartnerLabel, setClonePartnerLabel] = useState("");
+  const [labelPrintQty, setLabelPrintQty] = useState(1);
 
   // Edit modes
   const [isEditingIdea, setIsEditingIdea] = useState(false);
@@ -141,6 +148,9 @@ export default function IdeaDetailPage() {
     contentAPlusUrl: "",
     listingStatus: "ready",
     listingStatusReason: "",
+    vineStatus: "not_enrolled",
+    vineReviewUrl: "",
+    photosUploaded: false,
   });
 
   // Etsy listing form state
@@ -208,6 +218,9 @@ export default function IdeaDetailPage() {
           contentAPlusUrl: a.contentAPlusUrl || "",
           listingStatus: a.listingStatus || "ready",
           listingStatusReason: a.listingStatusReason || "",
+          vineStatus: a.vineStatus || "not_enrolled",
+          vineReviewUrl: a.vineReviewUrl || "",
+          photosUploaded: a.photosUploaded ?? false,
         });
       } else {
         // Pre-fill from idea
@@ -342,10 +355,23 @@ export default function IdeaDetailPage() {
   const handleCloneIdea = async () => {
     setSaving(true);
     try {
-      const res = await fetch(`/api/ideas/${id}/clone`, { method: "POST" });
+      const body: Record<string, string> = {};
+      if (cloneType === "partner") {
+        body.source = "partner";
+        body.partnerName = clonePartnerName;
+        body.partnerLabel = clonePartnerLabel;
+      }
+      const res = await fetch(`/api/ideas/${id}/clone`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
       if (res.ok) {
         const data = await res.json();
-        toast.success("Đã tạo bản sao ý tưởng!");
+        toast.success(cloneType === "partner" ? "Đã tạo bản sao cho đối tác!" : "Đã tạo bản sao ý tưởng!");
+        setCloneDialogOpen(false);
+        setClonePartnerName("");
+        setClonePartnerLabel("");
         router.push(`/ideas/${data.id}`);
       } else {
         const data = await res.json();
@@ -490,8 +516,8 @@ export default function IdeaDetailPage() {
     <div className="space-y-6 max-w-6xl">
       {/* Header */}
       <div className="flex items-start gap-4">
-        <Button variant="ghost" size="icon" asChild className="mt-1">
-          <Link href="/ideas"><ArrowLeft className="h-4 w-4" /></Link>
+        <Button variant="ghost" size="icon" className="mt-1" onClick={() => router.back()}>
+          <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 flex-wrap">
@@ -501,9 +527,18 @@ export default function IdeaDetailPage() {
               <Badge variant="destructive" className="bg-red-500 text-white animate-pulse">Sửa đổi mới</Badge>
             )}
             <Badge variant="outline">{idea.fulfillmentType}</Badge>
+            {(idea as Record<string, unknown>).source === "boss" && (
+              <Badge className="bg-purple-600 hover:bg-purple-700">Sếp</Badge>
+            )}
+            {(idea as Record<string, unknown>).source === "partner" && (
+              <Badge variant="secondary" className="bg-orange-100 text-orange-800 hover:bg-orange-200">Đối tác</Badge>
+            )}
           </div>
           <p className="text-sm text-muted-foreground mt-1">
             Tạo bởi {idea.createdBy.fullName} · {idea.topic.name} · {idea.aiModel.name}
+            {((idea as Record<string, unknown>).source === "partner" && (idea as Record<string, unknown>).partnerName) && (
+              <> · Đối tác: {String((idea as Record<string, unknown>).partnerName)}</>
+            )}
           </p>
         </div>
 
@@ -558,11 +593,75 @@ export default function IdeaDetailPage() {
             </AlertDialog>
           )}
 
-          {idea.status === "rejected" && (
-            <Button variant="outline" onClick={handleCloneIdea} disabled={saving}>
-              Tạo bản sao
-            </Button>
-          )}
+          <Dialog open={cloneDialogOpen} onOpenChange={setCloneDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" disabled={saving}>
+                <Copy className="h-4 w-4 mr-2" /> Tạo bản sao
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Tạo bản sao ý tưởng</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Loại bản sao</Label>
+                  <div className="flex gap-2">
+                    <Button
+                      variant={cloneType === "normal" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setCloneType("normal")}
+                      className="flex-1"
+                    >
+                      Sao chép thường
+                    </Button>
+                    <Button
+                      variant={cloneType === "partner" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setCloneType("partner")}
+                      className="flex-1"
+                    >
+                      Cho đối tác
+                    </Button>
+                  </div>
+                </div>
+                {cloneType === "partner" && (
+                  <>
+                    <div className="space-y-1">
+                      <Label htmlFor="partner-name">Tên đối tác <span className="text-red-500">*</span></Label>
+                      <Input
+                        id="partner-name"
+                        placeholder="VD: Công ty TNHH ABC"
+                        value={clonePartnerName}
+                        onChange={(e) => setClonePartnerName(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="partner-label">Mã label đối tác</Label>
+                      <Input
+                        id="partner-label"
+                        placeholder="VD: ABC-LABEL-01"
+                        value={clonePartnerLabel}
+                        onChange={(e) => setClonePartnerLabel(e.target.value)}
+                      />
+                    </div>
+                  </>
+                )}
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="outline" onClick={() => { setCloneDialogOpen(false); setClonePartnerName(""); setClonePartnerLabel(""); }}>
+                    Huỷ
+                  </Button>
+                  <Button
+                    onClick={handleCloneIdea}
+                    disabled={saving || (cloneType === "partner" && !clonePartnerName.trim())}
+                  >
+                    {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                    Tạo bản sao
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
 
           {canApprove && (
             <div className="flex gap-2">
@@ -1067,19 +1166,29 @@ export default function IdeaDetailPage() {
 
         {/* Right: Tabs for content, amazon, etsy */}
         <div className="lg:col-span-2">
-          <Tabs defaultValue="content">
-            <TabsList className="w-full grid grid-cols-4">
-              <TabsTrigger value="content">Nội dung</TabsTrigger>
-              <TabsTrigger value="amazon">
-                Amazon {idea.amazonListing && <Check className="ml-1 h-3 w-3 text-green-500" />}
-              </TabsTrigger>
-              <TabsTrigger value="etsy">
-                Etsy {idea.etsyListing && <Check className="ml-1 h-3 w-3 text-green-500" />}
-              </TabsTrigger>
+          {idea.status === "reviewing" && (
+            <div className="mb-4 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-300">
+              Ý tưởng đang chờ duyệt. Tab Amazon và Etsy sẽ hiển thị sau khi được duyệt.
+            </div>
+          )}
+          <Tabs defaultValue={(idea as Record<string, unknown>).source === "partner" ? "history" : idea.status === "reviewing" ? "content" : "content"}>
+            <TabsList className={`w-full grid ${(idea as Record<string, unknown>).source === "partner" || idea.status === "reviewing" ? "grid-cols-1" : "grid-cols-4"}`}>
+              {(idea as Record<string, unknown>).source !== "partner" && idea.status !== "reviewing" && (
+                <>
+                  <TabsTrigger value="content">Nội dung</TabsTrigger>
+                  <TabsTrigger value="amazon">
+                    Amazon {idea.amazonListing && <Check className="ml-1 h-3 w-3 text-green-500" />}
+                  </TabsTrigger>
+                  <TabsTrigger value="etsy">
+                    Etsy {idea.etsyListing && <Check className="ml-1 h-3 w-3 text-green-500" />}
+                  </TabsTrigger>
+                </>
+              )}
               <TabsTrigger value="history">Lịch sử</TabsTrigger>
             </TabsList>
 
             {/* Content Tab */}
+            {(idea as Record<string, unknown>).source !== "partner" && (
             <TabsContent value="content" className="mt-4 space-y-4">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
@@ -1160,9 +1269,95 @@ export default function IdeaDetailPage() {
                 </CardContent>
               </Card>
             </TabsContent>
+            )}
 
             {/* Amazon Listing Tab */}
+            {(idea as Record<string, unknown>).source !== "partner" && idea.status !== "reviewing" && (
             <TabsContent value="amazon" className="mt-4 space-y-4">
+              {/* ─── Label Print Card (top priority) ─── */}
+              {amzForm.fnskuCode && amzForm.fnskuLabelFileUrl && (() => {
+                const labelImgUrl = convertToDirectImageUrl(amzForm.fnskuLabelFileUrl) || amzForm.fnskuLabelFileUrl;
+                return (
+                <Card className="border-2 border-primary/20 bg-primary/5">
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-4">
+                      {/* Label Preview - clickable to enlarge */}
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <div className="shrink-0 w-20 h-12 rounded border overflow-hidden bg-white flex items-center justify-center cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={labelImgUrl}
+                              alt="Label preview"
+                              className="max-w-full max-h-full object-contain"
+                              onError={(e) => {
+                                const img = e.target as HTMLImageElement;
+                                if (img.src !== amzForm.fnskuLabelFileUrl) {
+                                  img.src = amzForm.fnskuLabelFileUrl;
+                                } else {
+                                  img.style.display = "none";
+                                }
+                              }}
+                            />
+                          </div>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-[90vw] max-h-[90vh] bg-transparent border-none shadow-none p-0" showCloseButton={false}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={labelImgUrl} alt="Label" className="max-w-[90vw] max-h-[90vh] object-contain rounded-md" />
+                        </DialogContent>
+                      </Dialog>
+                      {/* Info & Actions */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Printer className="h-4 w-4 text-primary" />
+                          <span className="font-semibold text-sm">In Label Sản Phẩm</span>
+                          <Badge variant="outline" className="text-[10px]">5×3cm</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          FNSKU: <span className="font-mono font-medium text-foreground">{amzForm.fnskuCode}</span>
+                        </p>
+                        <div className="flex items-center gap-2 mt-3">
+                          <Label className="text-xs shrink-0">Số lượng:</Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={99}
+                            className="w-16 h-8 text-center text-sm"
+                            value={labelPrintQty}
+                            onChange={(e) => setLabelPrintQty(Math.max(1, parseInt(e.target.value) || 1))}
+                          />
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              const w = window.open("", "_blank", "width=600,height=400");
+                              if (w) {
+                                const imgs = Array(labelPrintQty).fill(`<img src="${labelImgUrl}" alt="Label" onerror="this.remove()">`).join("");
+                                w.document.write('<!DOCTYPE html><html><head><title>Label</title>' +
+'<style>' +
+'@page{size:5cm 3cm;margin:0}' +
+'@media print{html,body{margin:0;padding:0}img{page-break-after:always}}' +
+'body{margin:0;padding:0;background:#fff;display:flex;flex-direction:column;align-items:center}' +
+'img{display:block;width:5cm;height:3cm;object-fit:contain}' +
+'</style></head><body>' + imgs + '<script>' +
+'var all=document.querySelectorAll("img"),n=all.length,ok=0;' +
+'if(n===0){window.print();window.close()}' +
+'all.forEach(function(img){img.onload=function(){ok++;if(ok===n)setTimeout(function(){window.print();window.close()},300)};' +
+'img.onerror=function(){img.remove();ok++;if(ok===n)setTimeout(function(){window.print();window.close()},300)}});' +
+'<' + '/script></body></html>');
+                                w.document.close();
+                              }
+                            }}
+                          >
+                            <Printer className="h-4 w-4 mr-2" /> In {labelPrintQty} label
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                );
+              })()}
+
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div>
@@ -1249,6 +1444,38 @@ export default function IdeaDetailPage() {
                         />
                       </div>
                     )}
+                    {/* Vine & Photos status - only for FBA */}
+                    {idea.fulfillmentType === "FBA" && (
+                      <>
+                        <div className="space-y-1.5">
+                          <Label>Vine Program</Label>
+                          <Select disabled={!isEditingAmz} value={amzForm.vineStatus || "not_enrolled"} onValueChange={(v) => setAmzForm({ ...amzForm, vineStatus: v })}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="not_enrolled">Chưa tham gia</SelectItem>
+                              <SelectItem value="enrolled">Đã đăng ký</SelectItem>
+                              <SelectItem value="reviewing">Đang đánh giá</SelectItem>
+                              <SelectItem value="completed">Hoàn thành</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {amzForm.vineStatus && amzForm.vineStatus !== "not_enrolled" && (
+                          <div className="space-y-1.5">
+                            <EditableField label="Link Vine Review" value={amzForm.vineReviewUrl} onChange={(v) => setAmzForm({ ...amzForm, vineReviewUrl: v })} isEditing={isEditingAmz} placeholder="https://..." />
+                          </div>
+                        )}
+                      </>
+                    )}
+                    <div className="space-y-1.5">
+                      <Label>Trạng thái ảnh</Label>
+                      <Select disabled={!isEditingAmz} value={amzForm.photosUploaded ? "uploaded" : "temp"} onValueChange={(v) => setAmzForm({ ...amzForm, photosUploaded: v === "uploaded" })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="temp">Đang dùng ảnh tạm</SelectItem>
+                          <SelectItem value="uploaded">Đã up ảnh thật</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1406,15 +1633,21 @@ export default function IdeaDetailPage() {
                     </div>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <Label>FNSKU Label File URL (Ảnh hoặc PDF)</Label>
-                    <ImagePreviewInput value={amzForm.fnskuLabelFileUrl} onChange={(val) => setAmzForm({ ...amzForm, fnskuLabelFileUrl: val })} readOnly={!isEditingAmz} />
-                  </div>
+                  {isEditingAmz && (
+                    <div className="space-y-1.5">
+                      <Label>FNSKU Label File URL (Ảnh hoặc PDF)</Label>
+                      <ImagePreviewInput value={amzForm.fnskuLabelFileUrl} onChange={(val) => setAmzForm({ ...amzForm, fnskuLabelFileUrl: val })} readOnly={!isEditingAmz} />
+                    </div>
+                  )}
+
+                  {/* Quick Label Print - removed, now at top */}
                 </CardContent>
               </Card>
             </TabsContent>
+            )}
 
             {/* Etsy Listing Tab */}
+            {(idea as Record<string, unknown>).source !== "partner" && idea.status !== "reviewing" && (
             <TabsContent value="etsy" className="mt-4 space-y-4">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
@@ -1657,6 +1890,8 @@ export default function IdeaDetailPage() {
                 </CardContent>
               </Card>
             </TabsContent>
+            )}
+
             {/* History Tab */}
             <TabsContent value="history" className="mt-4">
               <Card>

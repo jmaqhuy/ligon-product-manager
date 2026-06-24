@@ -63,8 +63,17 @@ model Idea {
   // Amazon/Etsy content - filled at idea creation
   title               String?
   description         String?
+  // Product dimensions & material
+  widthCm             Float?   @map("width_cm")
+  heightCm            Float?   @map("height_cm")
+  thicknessMm         Float?   @map("thickness_mm")
+  material            String?
   reviewComment       String?  @map("review_comment")
   needsReReview       Boolean  @default(false) @map("needs_rereview")
+  // Idea source tracking
+  source              String   @default("employee") @map("source") // employee | boss | partner
+  partnerName         String?  @map("partner_name")
+  partnerLabel        String?  @map("partner_label")
   version             Int      @default(1)
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
@@ -103,8 +112,11 @@ model AmazonListing {
   galleryImages         String?  @map("gallery_images") // JSON array of strings (max 9)
   videoUrl              String?  @map("video_url")
   contentAPlusUrl       String?  @map("content_a_plus_url")
-  listingStatus         String   @default("ready") @map("listing_status") // ready | uploaded | selling | error | fixed | delisted
+  listingStatus         String   @default("ready") @map("listing_status") // ready | uploading | uploaded | selling | error | fixed | delisted
   listingStatusReason   String?  @map("listing_status_reason") // Reason for error/delisted
+  vineStatus            String   @default("not_enrolled") @map("vine_status") // not_enrolled | enrolled | reviewing | completed
+  vineReviewUrl         String?  @map("vine_review_url")
+  photosUploaded        Boolean  @default(false) @map("photos_uploaded") // Đã up ảnh thật (không phải ảnh tạm)
   version               Int      @default(1)
   createdAt             DateTime @default(now()) @map("created_at")
   updatedAt             DateTime @updatedAt @map("updated_at")

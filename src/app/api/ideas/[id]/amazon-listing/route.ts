@@ -40,6 +40,9 @@ export async function PUT(
       contentAPlusUrl,
       listingStatus,
       listingStatusReason,
+      vineStatus,
+      vineReviewUrl,
+      photosUploaded,
       version,
     } = body;
 
@@ -79,6 +82,9 @@ export async function PUT(
         contentAPlusUrl,
         listingStatus,
         listingStatusReason: (listingStatus === "error" || listingStatus === "delisted") ? listingStatusReason : null,
+        vineStatus,
+        vineReviewUrl,
+        photosUploaded,
         version: { increment: 1 },
       },
       create: {
@@ -100,6 +106,9 @@ export async function PUT(
         contentAPlusUrl,
         listingStatus: listingStatus || "ready",
         listingStatusReason: (listingStatus === "error" || listingStatus === "delisted") ? listingStatusReason : null,
+        vineStatus: vineStatus || "not_enrolled",
+        vineReviewUrl,
+        photosUploaded: photosUploaded ?? false,
       },
     });
 

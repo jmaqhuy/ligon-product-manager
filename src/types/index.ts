@@ -30,6 +30,7 @@ export type FulfillmentType = (typeof FULFILLMENT_TYPES)[number];
 
 export const LISTING_STATUSES = [
   "ready",
+  "uploading",
   "uploaded",
   "selling",
   "error",
@@ -37,6 +38,14 @@ export const LISTING_STATUSES = [
   "delisted",
 ] as const;
 export type ListingStatus = (typeof LISTING_STATUSES)[number];
+
+export const VINE_STATUSES = [
+  "not_enrolled",
+  "enrolled",
+  "reviewing",
+  "completed",
+] as const;
+export type VineStatus = (typeof VINE_STATUSES)[number];
 
 export const PRODUCTION_PRIORITIES = ["urgent", "priority", "normal"] as const;
 export type ProductionPriority = (typeof PRODUCTION_PRIORITIES)[number];
@@ -90,11 +99,19 @@ export const fileStatusLabels: Record<FileStatus, string> = {
 
 export const listingStatusLabels: Record<ListingStatus, string> = {
   ready: "Sẵn sàng",
-  uploaded: "Đã up",
+  uploading: "Đang up",
+  uploaded: "Đã lên",
   selling: "Đang bán",
   error: "Lỗi",
   fixed: "Đã sửa",
   delisted: "Bị sàn gỡ",
+};
+
+export const vineStatusLabels: Record<VineStatus, string> = {
+  not_enrolled: "Chưa tham gia",
+  enrolled: "Đã đăng ký",
+  reviewing: "Đang đánh giá",
+  completed: "Hoàn thành",
 };
 
 export const productionPriorityLabels: Record<ProductionPriority, string> = {

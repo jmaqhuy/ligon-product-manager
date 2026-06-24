@@ -49,8 +49,8 @@ export function driveToPreviewUrl(url: string): string {
   const fileId = extractDriveFileId(url);
   if (!fileId) return url;
 
-  // Use lh3.googleusercontent.com for direct image display
-  return `https://lh3.googleusercontent.com/d/${fileId}`;
+  // Use Google Drive thumbnail API — more reliable than lh3.googleusercontent.com (avoids 429 rate limit)
+  return `https://drive.google.com/thumbnail?id=${fileId}&sz=w800-h800`;
 }
 
 /**
@@ -64,7 +64,7 @@ export function driveToThumbnailUrl(url: string, size: number = 200): string {
   const fileId = extractDriveFileId(url);
   if (!fileId) return url;
 
-  return `https://lh3.googleusercontent.com/d/${fileId}=s${size}`;
+  return `https://drive.google.com/thumbnail?id=${fileId}&sz=w${size}-h${size}`;
 }
 
 /**

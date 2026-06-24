@@ -117,6 +117,7 @@ async function main() {
       status: "approved",
       photoStatus: "pending_approval",
       fulfillmentType: "FBM",
+      source: "employee",
       title: "Personalized Wooden Dinosaur Back To School Sign, First Day Journey Board with Photo Frame, Engraved Milestone Keepsake for Kindergarten Grade 1 Kids, Natural Plywood Nursery Decor Gift",
       description: "Celebrate your child's educational milestones with our exquisitely crafted Personalized Wooden Dinosaur School Journey Board. Made from premium, sustainably sourced plywood, this charming brontosaurus-shaped sign captures the magic of the first day of school.",
       createdAt: new Date("2026-03-09"),
@@ -150,7 +151,7 @@ async function main() {
         "https://drive.google.com/file/d/12wjWQaP3ngkOXLM98uul5MRVVVINsaTp/view?usp=drive_link",
         "https://drive.google.com/file/d/12DcTmLZf8ujAwVaxK8yH2JwQJZO-YmhF/view?usp=drive_link",
       ]),
-      listingStatus: "editing",
+      listingStatus: "ready",
     },
   });
 
@@ -164,7 +165,7 @@ async function main() {
       price: 29.99,
       useSharedGallery: true,
       useAmazonVideo: false,
-      listingStatus: "editing",
+      listingStatus: "ready",
     },
   });
   console.log(`✅ Idea 1: ${idea1.msku} - Back To School Dinosaur`);
@@ -184,6 +185,7 @@ async function main() {
       status: "published",
       photoStatus: "approved",
       fulfillmentType: "FBA",
+      source: "employee",
       title: "Personalized Wooden Baby Monthly Milestone Board, Round Laser Engraved Month Tracker with Heart Pointer",
       description: "Track your baby's precious first year with our beautifully crafted wooden milestone board.",
       createdAt: new Date("2026-04-12"),
@@ -205,7 +207,7 @@ async function main() {
       description: "Track your baby's precious first year with our wooden milestone board.",
       tags: "baby milestone board;monthly photo prop;newborn gift;baby shower gift;personalized baby;wooden nursery decor",
       price: 24.99,
-      listingStatus: "published",
+      listingStatus: "selling",
     },
   });
   console.log(`✅ Idea 2: ${idea2.msku} - Baby Milestone`);
@@ -225,6 +227,7 @@ async function main() {
       status: "reviewing",
       photoStatus: "not_requested",
       fulfillmentType: "FBA",
+      source: "employee",
       title: "Personalized Wooden Christmas Ornament Set, Family Name Star Ornament with Snowflake Name Tags",
       description: "Create lasting holiday memories with our handcrafted personalized Christmas ornament set.",
       createdAt: new Date("2026-05-07"),
@@ -247,6 +250,7 @@ async function main() {
       status: "approved",
       photoStatus: "approved",
       fulfillmentType: "FBM",
+      source: "employee",
       title: "Personalized Wooden Wedding Welcome Sign, Rustic Ceremony Decor with Couple Names and Date",
       description: "Welcome your guests in style with our stunning personalized wooden wedding sign.",
       createdAt: new Date("2026-05-18"),
@@ -268,7 +272,7 @@ async function main() {
       description: "Welcome your guests in style with our stunning personalized wooden wedding sign.",
       tags: "wedding welcome sign;rustic wedding decor;personalized wedding;ceremony sign;reception decor;bridal shower",
       price: 49.99,
-      listingStatus: "ready_to_publish",
+      listingStatus: "ready",
     },
   });
   console.log(`✅ Idea 4: ${idea4.msku} - Wedding Sign`);
@@ -289,6 +293,7 @@ async function main() {
       photoStatus: "awaiting_photos",
       photoAssigneeId: ptl.id,
       fulfillmentType: "FBM",
+      source: "employee",
       title: "Personalized Mother Day Wooden Photo Frame, Heart Shape Mom Gift with Floral Engraving",
       description: "Show mom how much she means with our heartfelt personalized photo frame.",
       createdAt: new Date("2026-06-01"),
@@ -311,6 +316,7 @@ async function main() {
       status: "reviewing",
       photoStatus: "not_requested",
       fulfillmentType: "FBM",
+      source: "employee",
       title: "Personalized Pet Memorial Wooden Plaque, Paw Print Shape with Photo Insert and Custom Engraving",
       description: "Honor your beloved companion with our touching personalized pet memorial plaque.",
       createdAt: new Date("2026-06-10"),

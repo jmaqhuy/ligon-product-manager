@@ -15,6 +15,11 @@ export async function POST(
     }
 
     const { id } = await params;
+    const body = await req.json().catch(() => ({}));
+    const cloneSource = body.source as string | undefined;
+    const partnerName = body.partnerName as string | undefined;
+    const partnerLabel = body.partnerLabel as string | undefined;
+
     const oldIdea = await db.idea.findUnique({ where: { id } });
     
     if (!oldIdea) {
@@ -23,6 +28,9 @@ export async function POST(
 
     // Generate new MSKU
     const msku = await generateMsku(session.user.nameAbbreviation);
+
+    // If cloning as partner, skip content fields
+    const isPartner = cloneSource === "partner";
 
     // Create new idea based on old idea
     const newIdea = await db.idea.create({
@@ -37,11 +45,14 @@ export async function POST(
         sourceLinks: oldIdea.sourceLinks,
         mainImageUrl: oldIdea.mainImageUrl,
         fulfillmentType: oldIdea.fulfillmentType,
-        title: oldIdea.title,
-        description: oldIdea.description,
-        status: "reviewing",
+        title: isPartner ? null : oldIdea.title,
+        description: isPartner ? null : oldIdea.description,
+        status: isPartner ? "approved" : "reviewing",
         photoStatus: "not_requested",
         fileStatus: "not_started",
+        source: cloneSource || "employee",
+        partnerName: isPartner ? partnerName || null : null,
+        partnerLabel: isPartner ? partnerLabel || null : null,
       },
     });
 
@@ -52,12 +63,12 @@ export async function POST(
         entityId: newIdea.id,
         fieldName: "status",
         oldValue: null,
-        newValue: "reviewing",
+        newValue: isPartner ? "approved" : "reviewing",
         changedById: session.user.id,
       },
     });
 
-    return NextResponse.json({ id: newIdea.id }, { status: 201 });
+    return NextResponse.json({ id: newIdea.id, msku: newIdea.msku }, { status: 201 });
   } catch (error) {
     console.error("POST /api/ideas/[id]/clone error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
