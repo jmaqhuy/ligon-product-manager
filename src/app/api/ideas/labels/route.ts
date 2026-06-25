@@ -44,6 +44,21 @@ export async function POST(req: NextRequest) {
       take: 50,
     });
 
+    const missingLabelIdea = ideas.find(idea => !idea.amazonListing?.fnskuCode && !idea.amazonListing?.fnskuLabelFileUrl);
+    if (missingLabelIdea) {
+      return NextResponse.json(
+        { 
+          error: "Không thể in label.",
+          details: [`Sản phẩm ${missingLabelIdea.msku} chưa có thông tin label (FNSKU).`],
+          action: {
+            label: "Thêm tại đây",
+            url: `/ideas/${missingLabelIdea.id}?tab=amazon`
+          }
+        },
+        { status: 400 }
+      );
+    }
+
     const results = ideas.map((idea) => ({
       id: idea.id,
       msku: idea.msku,

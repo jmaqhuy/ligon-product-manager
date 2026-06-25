@@ -28,6 +28,7 @@ export async function GET(
         },
         topic: { select: { id: true, name: true } },
         aiModel: { select: { id: true, name: true } },
+        partner: { select: { id: true, name: true, googleSheetUrl: true } },
         amazonListing: {
           include: {
             sellingAccount: { select: { id: true, name: true, platform: true } },
@@ -152,11 +153,6 @@ export async function PATCH(
     // Production file URL
     if (body.productionFileUrl !== undefined) {
       updateData.productionFileUrl = body.productionFileUrl;
-    }
-
-    // Partner fields
-    if (body.partnerName !== undefined) {
-      updateData.partnerName = body.partnerName;
     }
     if (body.partnerLabel !== undefined) {
       updateData.partnerLabel = body.partnerLabel;
@@ -365,18 +361,37 @@ export async function DELETE(
 
     const role = session.user.role;
     
-    // Check delete conditions
+    // Global check: cannot delete if already in production
+    const inProduction = 
+      idea.status === "published" || 
+      idea.fileStatus === "approved" || 
+      !!idea.productionFileUrl || 
+      idea.productionRequests.length > 0;
+
+    if (inProduction) {
+      return NextResponse.json(
+        { 
+          error: "Không thể xoá ý tưởng.",
+          details: ["Ý tưởng này đã được duyệt thiết kế, đăng bán hoặc đang trong quá trình sản xuất."],
+          action: {
+            label: "Xem ý tưởng",
+            url: `/ideas/${id}`
+          }
+        },
+        { status: 403 }
+      );
+    }
+
+    // Role-specific check
     if (role === "employee") {
       if (idea.createdById !== session.user.id) {
-        return NextResponse.json({ error: "Bạn chỉ được xoá ý tưởng của chính mình" }, { status: 403 });
-      }
-      
-      const canDelete = 
-        idea.status === "reviewing" || 
-        (idea.status === "approved" && (idea.photoStatus === "not_requested" || idea.photoStatus === "awaiting_photos") && idea.fileStatus !== "approved" && !idea.productionFileUrl);
-        
-      if (!canDelete) {
-        return NextResponse.json({ error: "Ý tưởng đã chuyển sang giai đoạn sản xuất hoặc đăng bán nên không thể xoá" }, { status: 403 });
+        return NextResponse.json(
+          { 
+            error: "Không thể xoá ý tưởng.",
+            details: ["Bạn chỉ được phép xoá ý tưởng do chính mình tạo ra."]
+          }, 
+          { status: 403 }
+        );
       }
     }
 
@@ -398,6 +413,9 @@ export async function DELETE(
         }
         await tx.productionRequest.deleteMany({ where: { ideaId: id } });
       }
+      
+      // Delete ShipmentBoxItems referencing this idea
+      await tx.shipmentBoxItem.deleteMany({ where: { ideaId: id } });
       
       // Delete audit logs associated
       await tx.auditLog.deleteMany({ where: { entityType: "idea", entityId: id } });

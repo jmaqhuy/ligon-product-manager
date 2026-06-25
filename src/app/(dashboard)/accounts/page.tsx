@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { apiFetch } from "@/lib/api-client";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -30,7 +32,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -137,15 +138,8 @@ export default function AccountsPage() {
   }, []);
 
   const fetchSellingAccounts = useCallback(async () => {
-    try {
-      const res = await fetch("/api/selling-accounts");
-      if (res.ok) {
-        const data = await res.json();
-        setSellingAccounts(data);
-      }
-    } catch {
-      toast.error("Lỗi tải danh sách tài khoản đăng bán");
-    }
+    const { data } = await apiFetch("/api/selling-accounts");
+    if (data) setSellingAccounts(data);
   }, []);
 
   useEffect(() => {
@@ -156,87 +150,63 @@ export default function AccountsPage() {
   const handleCreateUser = async () => {
     setCreating(true);
     try {
-      const res = await fetch("/api/users", {
+      const { data } = await apiFetch("/api/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newUser),
+        successMessage: "Tạo tài khoản thành công",
       });
 
-      if (res.ok) {
-        toast.success("Tạo tài khoản thành công");
+      if (data) {
         setCreateOpen(false);
         setNewUser({ email: "", password: "", fullName: "", role: "employee" });
         fetchUsers();
-      } else {
-        const data = await res.json();
-        toast.error(data.error || "Lỗi tạo tài khoản");
       }
-    } catch {
-      toast.error("Lỗi hệ thống");
     } finally {
       setCreating(false);
     }
   };
 
   const handleDeactivateUser = async (userId: string) => {
-    try {
-      const res = await fetch(`/api/users/${userId}/deactivate`, {
-        method: "PATCH",
-      });
-      if (res.ok) {
-        toast.success("Đã vô hiệu hoá tài khoản");
-        fetchUsers();
-      } else {
-        const data = await res.json();
-        toast.error(data.error || "Lỗi vô hiệu hoá");
-      }
-    } catch {
-      toast.error("Lỗi hệ thống");
+    const { data } = await apiFetch(`/api/users/${userId}/deactivate`, {
+      method: "PATCH",
+      successMessage: "Đã vô hiệu hoá tài khoản",
+    });
+    if (data) {
+      fetchUsers();
     }
   };
 
   const handleCreateSellingAccount = async () => {
     setCreatingAccount(true);
     try {
-      const res = await fetch("/api/selling-accounts", {
+      const { data } = await apiFetch("/api/selling-accounts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newAccount),
+        successMessage: "Tạo tài khoản đăng bán thành công",
       });
 
-      if (res.ok) {
-        toast.success("Tạo tài khoản đăng bán thành công");
+      if (data) {
         setCreateAccountOpen(false);
         setNewAccount({ platform: "amazon", name: "" });
         fetchSellingAccounts();
-      } else {
-        const data = await res.json();
-        toast.error(data.error || "Lỗi tạo tài khoản đăng bán");
       }
-    } catch {
-      toast.error("Lỗi hệ thống");
     } finally {
       setCreatingAccount(false);
     }
   };
 
   const handleToggleAccountStatus = async (accountId: string, currentStatus: string) => {
-    try {
-      const newStatus = currentStatus === "active" ? "inactive" : "active";
-      const res = await fetch(`/api/selling-accounts/${accountId}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      if (res.ok) {
-        toast.success(`Đã ${newStatus === "active" ? "kích hoạt" : "ngừng"} tài khoản`);
-        fetchSellingAccounts();
-      } else {
-        const data = await res.json();
-        toast.error(data.error || "Lỗi cập nhật");
-      }
-    } catch {
-      toast.error("Lỗi hệ thống");
+    const newStatus = currentStatus === "active" ? "inactive" : "active";
+    const { data } = await apiFetch(`/api/selling-accounts/${accountId}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus }),
+      successMessage: `Đã ${newStatus === "active" ? "kích hoạt" : "ngừng"} tài khoản`,
+    });
+    if (data) {
+      fetchSellingAccounts();
     }
   };
 

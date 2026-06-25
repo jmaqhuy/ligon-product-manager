@@ -14,27 +14,27 @@ datasource db {
 // Module 1: Users & Auth
 // ============================
 model User {
-  id                String   @id @default(cuid())
-  email             String   @unique
-  passwordHash      String   @map("password_hash")
-  fullName          String   @map("full_name")
-  nameAbbreviation  String   @map("name_abbreviation")
-  role              String   @default("employee") // employee | manager | boss
-  status            String   @default("active") // active | inactive
-  startDate         DateTime @default(now()) @map("start_date")
-  avatarUrl         String?  @map("avatar_url")
-  notificationSettings String? @map("notification_settings") // JSON string
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  id                   String   @id @default(cuid())
+  email                String   @unique
+  passwordHash         String   @map("password_hash")
+  fullName             String   @map("full_name")
+  nameAbbreviation     String   @map("name_abbreviation")
+  role                 String   @default("employee") // employee | manager | boss
+  status               String   @default("active") // active | inactive
+  startDate            DateTime @default(now()) @map("start_date")
+  avatarUrl            String?  @map("avatar_url")
+  notificationSettings String?  @map("notification_settings") // JSON string
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
 
   // Relations
-  ideas             Idea[]   @relation("CreatedBy")
-  assignedPhotos    Idea[]   @relation("PhotoAssignee")
-  sellingAccounts   SellingAccount[] @relation("AccountCreatedBy")
-  notifications     Notification[]
-  auditLogs         AuditLog[]
-  ordersDesigned    Order[]  @relation("OrderDesigner")
-  ordersProduced    Order[]  @relation("OrderProducer")
+  ideas           Idea[]           @relation("CreatedBy")
+  assignedPhotos  Idea[]           @relation("PhotoAssignee")
+  sellingAccounts SellingAccount[] @relation("AccountCreatedBy")
+  notifications   Notification[]
+  auditLogs       AuditLog[]
+  ordersDesigned  Order[]          @relation("OrderDesigner")
+  ordersProduced  Order[]          @relation("OrderProducer")
 
   @@map("users")
 }
@@ -43,50 +43,51 @@ model User {
 // Module 2: Ideas / Products
 // ============================
 model Idea {
-  id                  String   @id @default(cuid())
-  sku                 String
-  msku                String   @unique
-  autoGenerateMsku    Boolean  @default(true) @map("auto_generate_msku")
-  createdById         String   @map("created_by")
-  topicId             String   @map("topic_id")
-  aiModelId           String   @map("ai_model_id")
-  prompt              String
-  sourceLinks         String   @default("[]") @map("source_links") // JSON array of strings
-  mainImageUrl        String   @map("main_image_url")
-  status              String   @default("reviewing") // reviewing | approved | published
-  photoStatus         String   @default("not_requested") @map("photo_status") // not_requested | awaiting_photos | pending_approval | revision_requested | approved
-  photoAssigneeId     String?  @map("photo_assignee_id")
-  photoRevisionNote   String?  @map("photo_revision_note")
-  fileStatus          String   @default("not_started") @map("file_status") // not_started | in_progress | pending_review | approved | revision_requested
-  fulfillmentType     String   @default("FBM") @map("fulfillment_type") // FBA | FBM
-  productionFileUrl   String?  @map("production_file_url")
+  id                String   @id @default(cuid())
+  sku               String
+  msku              String   @unique
+  autoGenerateMsku  Boolean  @default(true) @map("auto_generate_msku")
+  createdById       String   @map("created_by")
+  topicId           String   @map("topic_id")
+  aiModelId         String   @map("ai_model_id")
+  prompt            String
+  sourceLinks       String   @default("[]") @map("source_links") // JSON array of strings
+  mainImageUrl      String   @map("main_image_url")
+  status            String   @default("reviewing") // reviewing | approved | published
+  photoStatus       String   @default("not_requested") @map("photo_status") // not_requested | awaiting_photos | pending_approval | revision_requested | approved
+  photoAssigneeId   String?  @map("photo_assignee_id")
+  photoRevisionNote String?  @map("photo_revision_note")
+  fileStatus        String   @default("not_started") @map("file_status") // not_started | in_progress | pending_review | approved | revision_requested
+  fulfillmentType   String   @default("FBM") @map("fulfillment_type") // FBA | FBM
+  productionFileUrl String?  @map("production_file_url")
   // Amazon/Etsy content - filled at idea creation
-  title               String?
-  description         String?
+  title             String?
+  description       String?
   // Product dimensions & material
-  widthCm             Float?   @map("width_cm")
-  heightCm            Float?   @map("height_cm")
-  thicknessMm         Float?   @map("thickness_mm")
-  material            String?
-  reviewComment       String?  @map("review_comment")
-  needsReReview       Boolean  @default(false) @map("needs_rereview")
+  widthCm           Float?   @map("width_cm")
+  heightCm          Float?   @map("height_cm")
+  thicknessMm       Float?   @map("thickness_mm")
+  material          String?
+  reviewComment     String?  @map("review_comment")
+  needsReReview     Boolean  @default(false) @map("needs_rereview")
   // Idea source tracking
-  source              String   @default("employee") @map("source") // employee | boss | partner
-  partnerName         String?  @map("partner_name")
-  partnerLabel        String?  @map("partner_label")
-  version             Int      @default(1)
-  createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @updatedAt @map("updated_at")
+  source            String   @default("employee") @map("source") // employee | boss | partner
+  partnerId         String?  @map("partner_id")
+  partnerLabel      String?  @map("partner_label")
+  version           Int      @default(1)
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
   // Relations
-  createdBy           User     @relation("CreatedBy", fields: [createdById], references: [id])
-  photoAssignee       User?    @relation("PhotoAssignee", fields: [photoAssigneeId], references: [id])
-  topic               ProductTopic @relation(fields: [topicId], references: [id])
-  aiModel             AiModel  @relation(fields: [aiModelId], references: [id])
-  amazonListing       AmazonListing?
-  etsyListing         EtsyListing?
-  productionRequests  ProductionRequest[]
-  shipmentBoxItems    ShipmentBoxItem[]
+  createdBy          User                @relation("CreatedBy", fields: [createdById], references: [id])
+  photoAssignee      User?               @relation("PhotoAssignee", fields: [photoAssigneeId], references: [id])
+  topic              ProductTopic        @relation(fields: [topicId], references: [id])
+  aiModel            AiModel             @relation(fields: [aiModelId], references: [id])
+  amazonListing      AmazonListing?
+  etsyListing        EtsyListing?
+  productionRequests ProductionRequest[]
+  shipmentBoxItems   ShipmentBoxItem[]
+  partner            Partner?            @relation(fields: [partnerId], references: [id])
 
   @@map("ideas")
 }
@@ -95,35 +96,35 @@ model Idea {
 // Module 3: Amazon Listings
 // ============================
 model AmazonListing {
-  id                    String   @id @default(cuid())
-  ideaId                String   @unique @map("idea_id")
-  sellingAccountId      String?  @map("selling_account_id")
-  asin                  String?
-  fnskuCode             String?  @map("fnsku_code")
-  fnskuLabelFileUrl     String?  @map("fnsku_label_file_url")
-  itemName              String?  @map("item_name")
-  itemHighlights        String?  @map("item_highlights")
-  bulletPoints          String?  @map("bullet_points") // JSON array of 5 strings
-  description           String?
-  tags                  String?
-  slugs                 String?  // newline separated
-  price                 Float?
-  useSharedMainImage    Boolean  @default(true) @map("use_shared_main_image")
-  galleryImages         String?  @map("gallery_images") // JSON array of strings (max 9)
-  videoUrl              String?  @map("video_url")
-  contentAPlusUrl       String?  @map("content_a_plus_url")
-  listingStatus         String   @default("ready") @map("listing_status") // ready | uploading | uploaded | selling | error | fixed | delisted
-  listingStatusReason   String?  @map("listing_status_reason") // Reason for error/delisted
-  vineStatus            String   @default("not_enrolled") @map("vine_status") // not_enrolled | enrolled | reviewing | completed
-  vineReviewUrl         String?  @map("vine_review_url")
-  photosUploaded        Boolean  @default(false) @map("photos_uploaded") // Đã up ảnh thật (không phải ảnh tạm)
-  version               Int      @default(1)
-  createdAt             DateTime @default(now()) @map("created_at")
-  updatedAt             DateTime @updatedAt @map("updated_at")
+  id                  String   @id @default(cuid())
+  ideaId              String   @unique @map("idea_id")
+  sellingAccountId    String?  @map("selling_account_id")
+  asin                String?
+  fnskuCode           String?  @map("fnsku_code")
+  fnskuLabelFileUrl   String?  @map("fnsku_label_file_url")
+  itemName            String?  @map("item_name")
+  itemHighlights      String?  @map("item_highlights")
+  bulletPoints        String?  @map("bullet_points") // JSON array of 5 strings
+  description         String?
+  tags                String?
+  slugs               String? // newline separated
+  price               Float?
+  useSharedMainImage  Boolean  @default(true) @map("use_shared_main_image")
+  galleryImages       String?  @map("gallery_images") // JSON array of strings (max 9)
+  videoUrl            String?  @map("video_url")
+  contentAPlusUrl     String?  @map("content_a_plus_url")
+  listingStatus       String   @default("ready") @map("listing_status") // ready | uploading | uploaded | selling | error | fixed | delisted
+  listingStatusReason String?  @map("listing_status_reason") // Reason for error/delisted
+  vineStatus          String   @default("not_enrolled") @map("vine_status") // not_enrolled | enrolled | reviewing | completed
+  vineReviewUrl       String?  @map("vine_review_url")
+  photosUploaded      Boolean  @default(false) @map("photos_uploaded") // Đã up ảnh thật (không phải ảnh tạm)
+  version             Int      @default(1)
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
 
   // Relations
-  idea                  Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
-  sellingAccount        SellingAccount? @relation(fields: [sellingAccountId], references: [id])
+  idea           Idea            @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  sellingAccount SellingAccount? @relation(fields: [sellingAccountId], references: [id])
 
   @@map("amazon_listings")
 }
@@ -132,28 +133,28 @@ model AmazonListing {
 // Module 4: Etsy Listings
 // ============================
 model EtsyListing {
-  id                    String   @id @default(cuid())
-  ideaId                String   @unique @map("idea_id")
-  sellingAccountId      String?  @map("selling_account_id")
-  title                 String?
-  listingId             String?  @map("listing_id")
-  tags                  String?  // JSON array of strings (max 13, each max 20 chars)
-  description           String?
-  price                 Float?
-  useSharedMainImage    Boolean  @default(true) @map("use_shared_main_image")
-  galleryImages         String?  @map("gallery_images") // JSON array of strings (max 9)
-  useSharedGallery      Boolean  @default(false) @map("use_shared_gallery") // Use Amazon's gallery
-  videoUrl              String?  @map("video_url")
-  useAmazonVideo        Boolean  @default(false) @map("use_amazon_video")
-  listingStatus         String   @default("ready") @map("listing_status") // ready | uploaded | selling | error | fixed | delisted
-  listingStatusReason   String?  @map("listing_status_reason") // Reason for error/delisted
-  version               Int      @default(1)
-  createdAt             DateTime @default(now()) @map("created_at")
-  updatedAt             DateTime @updatedAt @map("updated_at")
+  id                  String   @id @default(cuid())
+  ideaId              String   @unique @map("idea_id")
+  sellingAccountId    String?  @map("selling_account_id")
+  title               String?
+  listingId           String?  @map("listing_id")
+  tags                String? // JSON array of strings (max 13, each max 20 chars)
+  description         String?
+  price               Float?
+  useSharedMainImage  Boolean  @default(true) @map("use_shared_main_image")
+  galleryImages       String?  @map("gallery_images") // JSON array of strings (max 9)
+  useSharedGallery    Boolean  @default(false) @map("use_shared_gallery") // Use Amazon's gallery
+  videoUrl            String?  @map("video_url")
+  useAmazonVideo      Boolean  @default(false) @map("use_amazon_video")
+  listingStatus       String   @default("ready") @map("listing_status") // ready | uploaded | selling | error | fixed | delisted
+  listingStatusReason String?  @map("listing_status_reason") // Reason for error/delisted
+  version             Int      @default(1)
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
 
   // Relations
-  idea                  Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
-  sellingAccount        SellingAccount? @relation(fields: [sellingAccountId], references: [id])
+  idea           Idea            @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  sellingAccount SellingAccount? @relation(fields: [sellingAccountId], references: [id])
 
   @@map("etsy_listings")
 }
@@ -162,20 +163,20 @@ model EtsyListing {
 // Module 5: Selling Accounts
 // ============================
 model SellingAccount {
-  id              String   @id @default(cuid())
-  platform        String   // amazon | etsy
-  name            String
-  status          String   @default("active") // active | inactive
-  createdById     String   @map("created_by")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id          String   @id @default(cuid())
+  platform    String // amazon | etsy
+  name        String
+  status      String   @default("active") // active | inactive
+  createdById String   @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   // Relations
-  createdBy       User     @relation("AccountCreatedBy", fields: [createdById], references: [id])
-  amazonListings  AmazonListing[]
-  etsyListings    EtsyListing[]
-  orders          Order[]
-  shipmentBoxes   ShipmentBox[]
+  createdBy      User            @relation("AccountCreatedBy", fields: [createdById], references: [id])
+  amazonListings AmazonListing[]
+  etsyListings   EtsyListing[]
+  orders         Order[]
+  shipmentBoxes  ShipmentBox[]
 
   @@map("selling_accounts")
 }
@@ -184,39 +185,39 @@ model SellingAccount {
 // Module 6: Production
 // ============================
 model ProductionRequest {
-  id              String    @id @default(cuid())
-  ideaId          String    @map("idea_id")
-  type            String    @default("batch") // batch | sample
-  priority        String    @default("normal") // urgent | priority | normal
-  requestedQty    Int       @map("requested_qty")
-  actualQty       Int?      @map("actual_qty")
-  requestedAt     DateTime  @default(now()) @map("requested_at")
-  completedAt     DateTime? @map("completed_at")
-  noteForWorkers  String?   @map("note_for_workers")
-  version         Int       @default(1)
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  id             String    @id @default(cuid())
+  ideaId         String    @map("idea_id")
+  type           String    @default("batch") // batch | sample
+  priority       String    @default("normal") // urgent | priority | normal
+  requestedQty   Int       @map("requested_qty")
+  actualQty      Int?      @map("actual_qty")
+  requestedAt    DateTime  @default(now()) @map("requested_at")
+  completedAt    DateTime? @map("completed_at")
+  noteForWorkers String?   @map("note_for_workers")
+  version        Int       @default(1)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  idea            Idea      @relation(fields: [ideaId], references: [id])
-  steps           ProductionStep[]
+  idea  Idea             @relation(fields: [ideaId], references: [id])
+  steps ProductionStep[]
 
   @@map("production_requests")
 }
 
 model ProductionStep {
-  id                    String    @id @default(cuid())
-  productionRequestId   String    @map("production_request_id")
-  stepName              String    @map("step_name") // cutting | printing | etc
-  sequenceOrder         Int       @map("sequence_order")
-  performedBy           String?   @map("performed_by") // Name string, not FK
-  startedAt             DateTime? @map("started_at")
-  finishedAt            DateTime? @map("finished_at")
-  createdAt             DateTime  @default(now()) @map("created_at")
-  updatedAt             DateTime  @updatedAt @map("updated_at")
+  id                  String    @id @default(cuid())
+  productionRequestId String    @map("production_request_id")
+  stepName            String    @map("step_name") // cutting | printing | etc
+  sequenceOrder       Int       @map("sequence_order")
+  performedBy         String?   @map("performed_by") // Name string, not FK
+  startedAt           DateTime? @map("started_at")
+  finishedAt          DateTime? @map("finished_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  productionRequest     ProductionRequest @relation(fields: [productionRequestId], references: [id], onDelete: Cascade)
+  productionRequest ProductionRequest @relation(fields: [productionRequestId], references: [id], onDelete: Cascade)
 
   @@map("production_steps")
 }
@@ -225,44 +226,44 @@ model ProductionStep {
 // Module 7: Orders
 // ============================
 model Order {
-  id                      String   @id @default(cuid())
-  platform                String   // amazon | etsy
-  orderId                 String   @map("order_id")
-  orderDate               DateTime @map("order_date")
-  customerName            String   @map("customer_name")
-  customerPhone           String?  @map("customer_phone")
-  addressLine1            String   @map("address_line1")
-  addressLine2            String?  @map("address_line2")
-  city                    String
-  state                   String?
-  zipcode                 String?
-  country                 String
-  itemDetail              String?  @map("item_detail")
-  weight                  Float?
-  length                  Float?
-  width                   Float?
-  height                  Float?
-  service                 String?  @default("US Express")
-  quantity                Int      @default(1)
-  sku                     String   // Loose reference to idea.sku/msku
-  unitPrice               Float?   @map("unit_price")
-  sellingAccountId        String   @map("selling_account_id")
-  customNote              String?  @map("custom_note")
-  trackingNumber          String?  @map("tracking_number")
-  trackingUploaded        Boolean  @default(false) @map("tracking_uploaded")
-  productionStatus        String   @default("producing") @map("production_status") // producing | produced | awaiting_fulfillment | fulfilled | ff_amz
-  designerId              String?  @map("designer_id")
-  orderProductionFileUrl  String?  @map("order_production_file_url")
-  producerId              String?  @map("producer_id")
-  note                    String?
-  version                 Int      @default(1)
-  createdAt               DateTime @default(now()) @map("created_at")
-  updatedAt               DateTime @updatedAt @map("updated_at")
+  id                     String   @id @default(cuid())
+  platform               String // amazon | etsy
+  orderId                String   @map("order_id")
+  orderDate              DateTime @map("order_date")
+  customerName           String   @map("customer_name")
+  customerPhone          String?  @map("customer_phone")
+  addressLine1           String   @map("address_line1")
+  addressLine2           String?  @map("address_line2")
+  city                   String
+  state                  String?
+  zipcode                String?
+  country                String
+  itemDetail             String?  @map("item_detail")
+  weight                 Float?
+  length                 Float?
+  width                  Float?
+  height                 Float?
+  service                String?  @default("US Express")
+  quantity               Int      @default(1)
+  sku                    String // Loose reference to idea.sku/msku
+  unitPrice              Float?   @map("unit_price")
+  sellingAccountId       String   @map("selling_account_id")
+  customNote             String?  @map("custom_note")
+  trackingNumber         String?  @map("tracking_number")
+  trackingUploaded       Boolean  @default(false) @map("tracking_uploaded")
+  productionStatus       String   @default("producing") @map("production_status") // producing | produced | awaiting_fulfillment | fulfilled | ff_amz
+  designerId             String?  @map("designer_id")
+  orderProductionFileUrl String?  @map("order_production_file_url")
+  producerId             String?  @map("producer_id")
+  note                   String?
+  version                Int      @default(1)
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
 
   // Relations
-  sellingAccount          SellingAccount @relation(fields: [sellingAccountId], references: [id])
-  designer                User?    @relation("OrderDesigner", fields: [designerId], references: [id])
-  producer                User?    @relation("OrderProducer", fields: [producerId], references: [id])
+  sellingAccount SellingAccount @relation(fields: [sellingAccountId], references: [id])
+  designer       User?          @relation("OrderDesigner", fields: [designerId], references: [id])
+  producer       User?          @relation("OrderProducer", fields: [producerId], references: [id])
 
   @@map("orders")
 }
@@ -271,42 +272,42 @@ model Order {
 // Module 8: Shipments
 // ============================
 model ShipmentBox {
-  id                String   @id @default(cuid())
-  shipDate          DateTime @map("ship_date")
-  amazonAccountId   String   @map("amazon_account_id")
-  shipmentId        String   @map("shipment_id") // Amazon shipment ID
-  boxName           String   @map("box_name")
-  warehouseCode     String   @map("warehouse_code")
-  labelFileUrl      String?  @map("label_file_url")
-  shipLine          String?  @map("ship_line") // SEA | SBay | Air VNL | custom
-  lengthCm          Float?   @map("length_cm")
-  widthCm           Float?   @map("width_cm")
-  heightCm          Float?   @map("height_cm")
-  weightKg          Float?   @map("weight_kg")
-  trackingNumber    String?  @map("tracking_number")
-  version           Int      @default(1)
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  id              String   @id @default(cuid())
+  shipDate        DateTime @map("ship_date")
+  amazonAccountId String   @map("amazon_account_id")
+  shipmentId      String   @map("shipment_id") // Amazon shipment ID
+  boxName         String   @map("box_name")
+  warehouseCode   String   @map("warehouse_code")
+  labelFileUrl    String?  @map("label_file_url")
+  shipLine        String?  @map("ship_line") // SEA | SBay | Air VNL | custom
+  lengthCm        Float?   @map("length_cm")
+  widthCm         Float?   @map("width_cm")
+  heightCm        Float?   @map("height_cm")
+  weightKg        Float?   @map("weight_kg")
+  trackingNumber  String?  @map("tracking_number")
+  version         Int      @default(1)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   // Relations
-  amazonAccount     SellingAccount @relation(fields: [amazonAccountId], references: [id])
-  items             ShipmentBoxItem[]
+  amazonAccount SellingAccount    @relation(fields: [amazonAccountId], references: [id])
+  items         ShipmentBoxItem[]
 
   @@map("shipment_boxes")
 }
 
 model ShipmentBoxItem {
-  id                String @id @default(cuid())
-  shipmentBoxId     String @map("shipment_box_id")
-  ideaId            String @map("idea_id")
-  qtyPerBox         Int    @map("qty_per_box")
-  totalBoxCount     Int    @map("total_box_count")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  id            String   @id @default(cuid())
+  shipmentBoxId String   @map("shipment_box_id")
+  ideaId        String   @map("idea_id")
+  qtyPerBox     Int      @map("qty_per_box")
+  totalBoxCount Int      @map("total_box_count")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   // Relations
-  shipmentBox       ShipmentBox @relation(fields: [shipmentBoxId], references: [id], onDelete: Cascade)
-  idea              Idea        @relation(fields: [ideaId], references: [id])
+  shipmentBox ShipmentBox @relation(fields: [shipmentBoxId], references: [id], onDelete: Cascade)
+  idea        Idea        @relation(fields: [ideaId], references: [id])
 
   @@map("shipment_box_items")
 }
@@ -338,7 +339,7 @@ model AiModel {
 model Notification {
   id          String   @id @default(cuid())
   userId      String   @map("user_id")
-  type        String   // idea_approved | revision_requested | photo_assigned | etc
+  type        String // idea_approved | revision_requested | photo_assigned | etc
   category    String   @default("general") // photo | production_file | processing_file | general
   message     String
   actionUrl   String?  @map("action_url")
@@ -348,7 +349,7 @@ model Notification {
   createdAt   DateTime @default(now()) @map("created_at")
 
   // Relations
-  user        User     @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 
   @@map("notifications")
 }
@@ -367,7 +368,7 @@ model AuditLog {
   changedAt   DateTime @default(now()) @map("changed_at")
 
   // Relations
-  changedBy   User     @relation(fields: [changedById], references: [id])
+  changedBy User @relation(fields: [changedById], references: [id])
 
   @@map("audit_logs")
 }
@@ -382,4 +383,35 @@ model Worker {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("workers")
+}
+
+// ============================
+// Module: Partners
+// ============================
+model Partner {
+  id             String   @id @default(cuid())
+  name           String   @unique
+  email          String?
+  phone          String?
+  address        String?
+  googleSheetUrl String?  @map("google_sheet_url")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  ideas Idea[]
+
+  @@map("partners")
+}
+
+// ============================
+// Module 12: System Settings
+// ============================
+model SystemSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique // e.g., "idea_title_max_length"
+  value       String // stored as string, parsed to JSON or Number on client
+  description String?
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
 }

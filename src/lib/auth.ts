@@ -132,6 +132,28 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.avatarUrl = user.avatarUrl;
         token.notificationSettings = user.notificationSettings;
       }
+      // Verify user still exists in DB (handles DB reset scenario)
+      if (token.id) {
+        try {
+          const existingUser = await db.user.findUnique({
+            where: { id: token.id },
+            select: { id: true, status: true, role: true, fullName: true, nameAbbreviation: true, avatarUrl: true, notificationSettings: true },
+          });
+          if (!existingUser || existingUser.status !== "active") {
+            // User no longer exists or is inactive — invalidate token
+            token.id = undefined as unknown as string;
+            token.role = undefined as unknown as Role;
+          }
+          // Keep token in sync with DB
+          token.role = existingUser!.role as Role;
+          token.fullName = existingUser!.fullName;
+          token.nameAbbreviation = existingUser!.nameAbbreviation;
+          token.avatarUrl = existingUser!.avatarUrl;
+          token.notificationSettings = existingUser!.notificationSettings;
+        } catch {
+          // DB error — keep existing token to avoid breaking the session
+        }
+      }
       return token;
     },
     async session({ session, token }) {

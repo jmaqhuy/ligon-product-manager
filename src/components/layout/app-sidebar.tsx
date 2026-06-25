@@ -76,10 +76,24 @@ const navItems = [
     href: "/tools",
     icon: Wrench,
   },
+];
+
+const metadataItems = [
   {
-    title: "Cài đặt",
-    href: "/settings",
-    icon: Settings,
+    title: "Chủ đề",
+    href: "/metadata/topics",
+  },
+  {
+    title: "AI Models",
+    href: "/metadata/ai-models",
+  },
+  {
+    title: "Đối tác",
+    href: "/metadata/partners",
+  },
+  {
+    title: "Quy tắc chung",
+    href: "/metadata/rules",
   },
 ];
 
@@ -137,6 +151,28 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {user && (user.role === "manager" || user.role === "boss") && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Dữ liệu cấu hình</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {metadataItems.map((item) => {
+                  const isActive = pathname === item.href || pathname.startsWith(item.href);
+                  return (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton asChild isActive={isActive}>
+                        <Link href={item.href}>
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         <SidebarGroup>
           <SidebarGroupLabel>Thông báo</SidebarGroupLabel>

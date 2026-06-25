@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { orderProductionStatusLabels, type OrderProductionStatus } from "@/types";
+import { apiFetch } from "@/lib/api-client";
 
 function statusBadge(status: string) {
   const styles: Record<string, string> = {
@@ -69,12 +70,10 @@ export default function OrdersPage() {
       const params = new URLSearchParams({ status: tab });
       if (search) params.set("search", search);
       if (platformFilter !== "all") params.set("platform", platformFilter);
-      const res = await fetch(`/api/orders?${params}`);
-      if (res.ok) {
-        setOrders(await res.json());
+      const { data } = await apiFetch(`/api/orders?${params}`);
+      if (data) {
+        setOrders(data);
       }
-    } catch {
-      console.error("Failed to fetch orders");
     } finally {
       setLoading(false);
     }
@@ -83,16 +82,13 @@ export default function OrdersPage() {
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
   const handleStatusChange = async (orderId: string, newStatus: string) => {
-    try {
-      const res = await fetch(`/api/orders/${orderId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productionStatus: newStatus }),
-      });
-      if (res.ok) fetchOrders();
-    } catch {
-      console.error("Failed to update order");
-    }
+    const { data } = await apiFetch(`/api/orders/${orderId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ productionStatus: newStatus }),
+      successMessage: "Đã cập nhật trạng thái",
+    });
+    if (data) fetchOrders();
   };
 
   const renderTable = () => {

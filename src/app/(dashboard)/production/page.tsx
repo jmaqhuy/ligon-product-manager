@@ -51,6 +51,8 @@ import {
   FileText,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { format } from "date-fns";
+import { apiFetch } from "@/lib/api-client";
 import { toast } from "sonner";
 import { can, type Role } from "@/lib/permissions";
 import { productionPriorityLabels, type ProductionPriority } from "@/types";
@@ -210,7 +212,7 @@ function CreateProductionDialog({ onCreated }: { onCreated: () => void }) {
 
     setSaving(true);
     try {
-      const res = await fetch("/api/production", {
+      const { data } = await apiFetch("/api/production", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -220,9 +222,9 @@ function CreateProductionDialog({ onCreated }: { onCreated: () => void }) {
           requestedQty: parseInt(qty),
           noteForWorkers: note || null,
         }),
+        successMessage: "Đã tạo yêu cầu sản xuất!",
       });
-      if (res.ok) {
-        toast.success("Đã tạo yêu cầu sản xuất!");
+      if (data) {
         setOpen(false);
         setSelectedIdeaId("");
         setSelectedIdeaName("");
@@ -230,12 +232,7 @@ function CreateProductionDialog({ onCreated }: { onCreated: () => void }) {
         setQty("1");
         setNote("");
         onCreated();
-      } else {
-        const data = await res.json();
-        toast.error(data.error || "Lỗi tạo yêu cầu");
       }
-    } catch {
-      toast.error("Lỗi hệ thống");
     } finally {
       setSaving(false);
     }
@@ -358,12 +355,10 @@ export default function ProductionPage() {
     try {
       const params = new URLSearchParams({ status: tab });
       if (search) params.set("search", search);
-      const res = await fetch(`/api/production?${params}`);
-      if (res.ok) {
-        setRequests(await res.json());
+      const { data } = await apiFetch(`/api/production?${params}`);
+      if (data) {
+        setRequests(data);
       }
-    } catch {
-      console.error("Failed to fetch production requests");
     } finally {
       setLoading(false);
     }
@@ -372,40 +367,26 @@ export default function ProductionPage() {
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
 
   const handleStepAction = async (stepId: string, action: string, workerName?: string) => {
-    try {
-      const res = await fetch(`/api/production/steps/${stepId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, workerName }),
-      });
-      if (res.ok) {
-        toast.success(action === "start" ? "Đã bắt đầu!" : "Đã hoàn thành bước!");
-        fetchRequests();
-      } else {
-        const data = await res.json();
-        toast.error(data.error || "Lỗi cập nhật");
-      }
-    } catch {
-      toast.error("Lỗi hệ thống");
+    const { data } = await apiFetch(`/api/production/steps/${stepId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, workerName }),
+      successMessage: action === "start" ? "Đã bắt đầu!" : "Đã hoàn thành bước!",
+    });
+    if (data) {
+      fetchRequests();
     }
   };
 
   const handleComplete = async (requestId: string) => {
-    try {
-      const res = await fetch(`/api/production/${requestId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ completed: true }),
-      });
-      if (res.ok) {
-        toast.success("Đã hoàn thành sản xuất!");
-        fetchRequests();
-      } else {
-        const data = await res.json();
-        toast.error(data.error || "Lỗi");
-      }
-    } catch {
-      toast.error("Lỗi hệ thống");
+    const { data } = await apiFetch(`/api/production/${requestId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ completed: true }),
+      successMessage: "Đã hoàn thành sản xuất!",
+    });
+    if (data) {
+      fetchRequests();
     }
   };
 

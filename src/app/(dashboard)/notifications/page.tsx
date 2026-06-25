@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { apiFetch } from "@/lib/api-client";
 import {
   Bell,
   BellOff,
@@ -65,14 +66,11 @@ export default function NotificationsPage() {
     try {
       const params = new URLSearchParams({ sort: sortBy });
       if (category !== "all") params.set("category", category);
-      const res = await fetch(`/api/notifications?${params}`);
-      if (res.ok) {
-        const data = await res.json();
+      const { data } = await apiFetch(`/api/notifications?${params}`);
+      if (data) {
         setNotifications(data.notifications);
         setUnreadCount(data.unreadCount);
       }
-    } catch {
-      console.error("Failed to fetch notifications");
     } finally {
       setLoading(false);
     }
@@ -81,15 +79,13 @@ export default function NotificationsPage() {
   useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
 
   const markAsRead = async (id: string) => {
-    try {
-      await fetch(`/api/notifications/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isRead: true }),
-      });
+    const { data } = await apiFetch(`/api/notifications/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isRead: true }),
+    });
+    if (data) {
       fetchNotifications();
-    } catch {
-      toast.error("Lỗi");
     }
   };
 
@@ -149,7 +145,7 @@ export default function NotificationsPage() {
             const isUnread = !n.isRead;
             return (
               <div key={n.id} className="relative group">
-                <Link href={n.actionUrl || "#"} onClick={() => { if (isUnread) markAsRead(n.id); }}>
+                <Link href={n.actionUrl || "#"} target="_blank" rel="noopener noreferrer" onClick={() => { if (isUnread) markAsRead(n.id); }}>
                   <Card
                     className={`transition-colors cursor-pointer hover:bg-muted/50 ${
                       isUnread ? "border-l-4 border-l-blue-500 bg-blue-50/30 dark:bg-blue-950/20" : ""

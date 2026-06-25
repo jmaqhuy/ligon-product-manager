@@ -31,6 +31,7 @@ import {
 import Link from "next/link";
 import { toast } from "sonner";
 import { orderProductionStatusLabels, type OrderProductionStatus } from "@/types";
+import { apiFetch } from "@/lib/api-client";
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -48,11 +49,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
   const fetchOrder = useCallback(async () => {
     try {
-      // Fetch all orders and find by id (since we don't have a GET endpoint for single order)
-      const res = await fetch(`/api/orders?search=`);
-      if (res.ok) {
-        const orders = await res.json();
-        const found = orders.find((o: { id: string }) => o.id === id);
+      const { data } = await apiFetch(`/api/orders?search=`);
+      if (data) {
+        const found = data.find((o: { id: string }) => o.id === id);
         if (found) {
           setOrder(found);
           setTrackingNumber(found.trackingNumber || "");
@@ -60,8 +59,6 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           setProductionStatus(found.productionStatus);
         }
       }
-    } catch {
-      toast.error("Lỗi tải đơn hàng");
     } finally {
       setLoading(false);
     }
@@ -74,7 +71,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await fetch(`/api/orders/${id}`, {
+      const { data } = await apiFetch(`/api/orders/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -82,15 +79,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           note: note || null,
           productionStatus,
         }),
+        successMessage: "Đã cập nhật đơn hàng!",
       });
-      if (res.ok) {
-        toast.success("Đã cập nhật đơn hàng!");
+      if (data) {
         fetchOrder();
-      } else {
-        toast.error("Lỗi cập nhật");
       }
-    } catch {
-      toast.error("Lỗi hệ thống");
     } finally {
       setSaving(false);
     }

@@ -29,6 +29,7 @@ import {
 import { toast } from "sonner";
 import { roleLabels } from "@/types";
 import type { Role } from "@/lib/permissions";
+import { apiFetch } from "@/lib/api-client";
 
 export default function SettingsPage() {
   const { data: session, update: updateSession } = useSession();
@@ -66,24 +67,19 @@ export default function SettingsPage() {
   const handleSaveSettings = async () => {
     setSavingSettings(true);
     try {
-      const res = await fetch("/api/users/me", {
+      const { data } = await apiFetch("/api/users/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           avatarUrl,
           notificationSettings,
         }),
+        successMessage: "Đã lưu thông tin tài khoản",
       });
 
-      if (res.ok) {
-        toast.success("Đã lưu thông tin tài khoản");
+      if (data) {
         await updateSession();
-      } else {
-        const err = await res.json();
-        toast.error(err.error || "Lỗi lưu thông tin");
       }
-    } catch {
-      toast.error("Lỗi hệ thống khi lưu");
     } finally {
       setSavingSettings(false);
     }
@@ -105,23 +101,18 @@ export default function SettingsPage() {
 
     setChangingPassword(true);
     try {
-      const res = await fetch("/api/users/change-password", {
+      const { data } = await apiFetch("/api/users/change-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ currentPassword, newPassword }),
+        successMessage: "Đổi mật khẩu thành công!",
       });
 
-      if (res.ok) {
-        toast.success("Đổi mật khẩu thành công!");
+      if (data) {
         setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
-      } else {
-        const data = await res.json();
-        toast.error(data.error || "Lỗi đổi mật khẩu");
       }
-    } catch {
-      toast.error("Lỗi hệ thống");
     } finally {
       setChangingPassword(false);
     }

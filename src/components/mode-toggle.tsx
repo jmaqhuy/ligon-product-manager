@@ -26,13 +26,13 @@ export function ModeToggle() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onClick={() => setTheme("light")}>
-          Light
+          <Sun className="h-4 w-4 mr-2" /> Sáng
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => setTheme("dark")}>
-          Dark
+          <Moon className="h-4 w-4 mr-2" /> Tối
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => setTheme("system")}>
-          System
+          <span className="h-4 w-4 mr-2 inline-flex items-center justify-center text-[10px] font-bold">💻</span> Hệ thống
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

@@ -39,7 +39,26 @@ import {
   X,
   Printer,
   ExternalLink,
+  MoreHorizontal,
+  Trash2,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -66,6 +85,7 @@ import {
 } from "@/types";
 import type { Role } from "@/lib/permissions";
 import { convertToDirectImageUrl } from "@/lib/google-drive";
+import { apiFetch } from "@/lib/api-client";
 
 // Status badge colors
 function getStatusBadge(status: IdeaStatus) {
@@ -289,10 +309,10 @@ export default function IdeasPage() {
   const [loading, setLoading] = useState(true);
   const [topicId, setTopicId] = useState("");
   const [month, setMonth] = useState("");
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [topics, setTopics] = useState<any[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchProcessing, setBatchProcessing] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [labelDialogOpen, setLabelDialogOpen] = useState(false);
   const [labelSkusInput, setLabelSkusInput] = useState("");
   const [labelResults, setLabelResults] = useState<any[]>([]);
@@ -302,7 +322,7 @@ export default function IdeasPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const pageSize = 20;
-  const canSelect = true; // All roles can select for label printing etc.
+  const canSelect = true;
 
   const handleSelectionChange = useCallback((id: string, checked: boolean) => {
     setSelectedIds((prev) => {
@@ -313,26 +333,74 @@ export default function IdeasPage() {
     });
   }, []);
 
-  const handleBatchAction = async (action: string) => {
+  const canDeleteIdea = (idea: any) => {
+    // Determine if in production (same as backend logic)
+    const inProduction = idea.status === "published" || idea.fileStatus === "approved" || !!idea.productionFileUrl;
+    if (inProduction) return false;
+
+    if (role === "boss" || role === "manager") return true;
+    if (idea.createdById !== session?.user?.id) return false;
+    
+    if (idea.status === "reviewing") return true;
+    if (
+      idea.status === "approved" &&
+      (idea.photoStatus === "not_requested" || idea.photoStatus === "awaiting_photos") &&
+      idea.fileStatus !== "approved" &&
+      !idea.productionFileUrl
+    ) {
+      return true;
+    }
+    return false;
+  };
+
+
+  const handleBatchAction = async (action: "approve" | "request_photos" | "request_file") => {
     if (selectedIds.size === 0) return;
     setBatchProcessing(true);
+    const { toast } = await import("sonner");
     try {
-      const res = await fetch("/api/ideas/batch", {
+      const { data, error } = await apiFetch("/api/ideas/batch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: Array.from(selectedIds), action }),
+        body: JSON.stringify({
+          ids: Array.from(selectedIds),
+          action
+        })
       });
-      const data = await res.json();
-      if (res.ok) {
-        const toast = (await import("sonner")).toast;
-        toast.success(`Đã ${action === "approve" ? "duyệt" : action === "request_photos" ? "yêu cầu làm ảnh" : "yêu cầu làm file"} ${data.successCount}/${data.totalCount} ý tưởng`);
+      if (!error) {
+        toast.success(`Đã xử lý ${selectedIds.size} ý tưởng thành công`);
+        setSelectedIds(new Set());
+        fetchIdeas();
+      } else {
+        toast.error(error || "Có lỗi xảy ra");
+      }
+    } catch {
+      toast.error("Lỗi kết nối");
+    } finally {
+      setBatchProcessing(false);
+    }
+  };
+
+  const [batchDeleteIdList, setBatchDeleteIdList] = useState<string[]>([]);
+  const handleBatchDelete = async () => {
+    if (batchDeleteIdList.length === 0) return;
+    setIsDeleting(true);
+    let successCount = 0;
+    try {
+      for (const id of batchDeleteIdList) {
+        const res = await fetch(`/api/ideas/${id}`, { method: "DELETE" });
+        if (res.ok) successCount++;
+      }
+      if (successCount > 0) {
+        toast.success(`Đã xoá ${successCount} ý tưởng thành công`);
         setSelectedIds(new Set());
         fetchIdeas();
       }
     } catch {
-      console.error("Batch action failed");
+      toast.error("Lỗi kết nối khi xoá");
     } finally {
-      setBatchProcessing(false);
+      setIsDeleting(false);
+      setBatchDeleteIdList([]);
     }
   };
 
@@ -341,20 +409,24 @@ export default function IdeasPage() {
     if (skus.length === 0) return;
     setLabelLoading(true);
     try {
-      const res = await fetch("/api/ideas/labels", {
+      const { data, error } = await apiFetch("/api/ideas/labels", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ skus, quantities: labelQuantities }),
       });
-      if (res.ok) {
-        const data = await res.json();
+      
+      if (error) {
+        setLabelDialogOpen(false); // Đóng modal nếu có lỗi để hiện action toast
+        return;
+      }
+      
+      if (data) {
         setLabelResults(data);
         const qty: Record<string, number> = {};
         data.forEach((item: any) => { qty[item.id] = item.quantity || 1; });
         setLabelQuantities(qty);
       }
-    } catch { console.error("Label search failed"); }
-    finally { setLabelLoading(false); }
+    } finally { setLabelLoading(false); }
   };
 
   const handleOpenAllLabels = () => {
@@ -527,25 +599,38 @@ export default function IdeasPage() {
               setTimeout(async () => {
                 setLabelLoading(true);
                 try {
-                  const res = await fetch("/api/ideas/labels", {
+                  const { data, error } = await apiFetch("/api/ideas/labels", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ skus: selectedIdeas.map(i => i.msku) }),
                   });
-                  if (res.ok) {
-                    const data = await res.json();
+                  
+                  if (error) {
+                    setLabelDialogOpen(false);
+                  } else if (data) {
                     setLabelResults(data);
                     const qty: Record<string, number> = {};
                     data.forEach((item: any) => { qty[item.id] = item.quantity || 1; });
                     setLabelQuantities(qty);
                   }
-                } catch { console.error("Label search failed"); }
-                finally { setLabelLoading(false); }
+                } finally { setLabelLoading(false); }
               }, 100);
             }} disabled={batchProcessing} className="rounded-full">
               <Printer className="h-4 w-4 mr-1" /> In Label
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())} disabled={batchProcessing} className="rounded-full">
+            {(() => {
+              const selectedIdeas = ideas.filter(i => selectedIds.has(i.id));
+              const canDeleteBatch = selectedIdeas.length > 0 && selectedIdeas.every(i => canDeleteIdea(i));
+              if (canDeleteBatch) {
+                return (
+                  <Button size="sm" variant="destructive" onClick={() => setBatchDeleteIdList(Array.from(selectedIds))} disabled={batchProcessing} className="rounded-full ml-2">
+                    <Trash2 className="h-4 w-4 mr-1" /> Xoá
+                  </Button>
+                );
+              }
+              return null;
+            })()}
+            <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())} disabled={batchProcessing} className="rounded-full ml-1">
               <X className="h-4 w-4" />
             </Button>
           </div>
@@ -738,6 +823,27 @@ export default function IdeasPage() {
           </div>
         </DialogContent>
       </Dialog>
+      <AlertDialog open={batchDeleteIdList.length > 0} onOpenChange={(open) => !open && setBatchDeleteIdList([])}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Bạn có chắc chắn muốn xoá {batchDeleteIdList.length} ý tưởng?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Hành động này không thể hoàn tác. Toàn bộ thông tin liên quan đến các ý tưởng này sẽ bị xoá vĩnh viễn.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleBatchDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+              Xoá tất cả
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

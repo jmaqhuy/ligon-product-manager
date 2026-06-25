@@ -28,6 +28,9 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { format } from "date-fns";
+import { vi } from "date-fns/locale";
+import { apiFetch } from "@/lib/api-client";
 import { productionPriorityLabels, type ProductionPriority } from "@/types";
 
 export default function ProductionDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -65,67 +68,43 @@ export default function ProductionDetailPage({ params }: { params: Promise<{ id:
   }, [fetchData]);
 
   const handleStartStep = async (stepId: string) => {
-    try {
-      const res = await fetch(`/api/production/steps/${stepId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "start" }),
-      });
-      if (res.ok) {
-        toast.success("Đã bắt đầu bước sản xuất");
-        fetchData();
-      }
-    } catch {
-      toast.error("Lỗi cập nhật");
-    }
+    const { data } = await apiFetch(`/api/production/steps/${stepId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "start" }),
+      successMessage: "Đã bắt đầu bước sản xuất",
+    });
+    if (data) fetchData();
   };
 
   const handleFinishStep = async (stepId: string) => {
-    try {
-      const res = await fetch(`/api/production/steps/${stepId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "finish" }),
-      });
-      if (res.ok) {
-        toast.success("Đã hoàn thành bước sản xuất");
-        fetchData();
-      }
-    } catch {
-      toast.error("Lỗi cập nhật");
-    }
+    const { data } = await apiFetch(`/api/production/steps/${stepId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "finish" }),
+      successMessage: "Đã hoàn thành bước sản xuất",
+    });
+    if (data) fetchData();
   };
 
   const handleAssignWorker = async (stepId: string, workerName: string) => {
-    try {
-      const res = await fetch(`/api/production/steps/${stepId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ performedBy: workerName }),
-      });
-      if (res.ok) {
-        toast.success("Đã gán công nhân");
-        fetchData();
-      }
-    } catch {
-      toast.error("Lỗi cập nhật");
-    }
+    const { data } = await apiFetch(`/api/production/steps/${stepId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ performedBy: workerName }),
+      successMessage: "Đã gán công nhân",
+    });
+    if (data) fetchData();
   };
 
   const handleComplete = async () => {
-    try {
-      const res = await fetch(`/api/production/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ completed: true }),
-      });
-      if (res.ok) {
-        toast.success("Đã hoàn thành yêu cầu sản xuất!");
-        fetchData();
-      }
-    } catch {
-      toast.error("Lỗi cập nhật");
-    }
+    const { data } = await apiFetch(`/api/production/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ completed: true }),
+      successMessage: "Đã hoàn thành yêu cầu sản xuất!",
+    });
+    if (data) fetchData();
   };
 
   if (loading) {

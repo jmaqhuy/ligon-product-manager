@@ -99,6 +99,7 @@ export async function GET(req: NextRequest) {
         include: {
           createdBy: { select: { fullName: true, nameAbbreviation: true } },
           topic: { select: { name: true } },
+          partner: { select: { name: true } },
         },
         orderBy: tab === "reviewing" ? { createdAt: "desc" } : { updatedAt: "desc" },
         skip: (page - 1) * pageSize,
@@ -121,7 +122,7 @@ export async function GET(req: NextRequest) {
       title: idea.title,
       needsReReview: idea.needsReReview,
       source: idea.source,
-      partnerName: idea.partnerName,
+      partnerName: idea.partner?.name,
     }));
 
     return NextResponse.json({
@@ -158,22 +159,25 @@ export async function POST(req: Request) {
       title,
       description,
       source,
-      partnerName,
+      partnerId,
       partnerLabel,
       widthCm,
       heightCm,
       thicknessMm,
       material,
+      bulletPoints,
+      tags,
+      slugs,
     } = body;
 
     // Determine source: explicit > role-based > default
     const role = session.user.role as Role;
     const ideaSource = source || (role === "manager" || role === "boss" ? "boss" : "employee");
 
-    // Partner ideas: partnerName is required
-    if (ideaSource === "partner" && !partnerName) {
+    // Partner ideas: partnerId is required
+    if (ideaSource === "partner" && !partnerId) {
       return NextResponse.json(
-        { error: "Vui lòng nhập tên đối tác" },
+        { error: "Vui lòng chọn đối tác" },
         { status: 400 }
       );
     }
@@ -212,9 +216,9 @@ export async function POST(req: Request) {
         msku,
         sku: msku, // Default SKU = MSKU
         autoGenerateMsku: autoGenerateMsku !== false,
-        createdById: session.user.id,
-        topicId,
-        aiModelId,
+        createdBy: { connect: { id: session.user.id } },
+        topic: { connect: { id: topicId } },
+        aiModel: { connect: { id: aiModelId } },
         prompt,
         sourceLinks: JSON.stringify(sourceLinks || []),
         mainImageUrl,
@@ -223,12 +227,22 @@ export async function POST(req: Request) {
         title: title || null,
         description: description || null,
         source: ideaSource,
-        partnerName: ideaSource === "partner" ? partnerName : null,
+        ...(ideaSource === "partner" && partnerId ? { partner: { connect: { id: partnerId } } } : {}),
         partnerLabel: partnerLabel || null,
         widthCm: widthCm || null,
         heightCm: heightCm || null,
         thicknessMm: thicknessMm || null,
         material: material || null,
+        amazonListing: {
+          create: {
+            bulletPoints: bulletPoints ? JSON.stringify(bulletPoints) : JSON.stringify([]),
+            tags: tags || null,
+            slugs: slugs || null,
+          }
+        },
+        etsyListing: {
+          create: {}
+        }
       },
     });
 
