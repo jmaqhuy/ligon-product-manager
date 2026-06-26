@@ -73,6 +73,8 @@ import {
   Layers,
   Tag,
   Store,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
 import { toast } from "sonner";
@@ -101,6 +103,14 @@ const statusColors: Record<string, string> = {
   pending_review: "bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300",
   editing: "bg-cyan-100 text-cyan-800 border-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-300",
   ready_to_publish: "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300",
+  // Listing statuses
+  ready: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300",
+  uploading: "bg-cyan-100 text-cyan-800 border-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-300",
+  uploaded: "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300",
+  selling: "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300",
+  error: "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300",
+  fixed: "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300",
+  delisted: "bg-red-200 text-red-900 border-red-300 dark:bg-red-900/50 dark:text-red-400",
 };
 
 function statusBadge(status: string, labels: Record<string, string>) {
@@ -110,6 +120,22 @@ function statusBadge(status: string, labels: Record<string, string>) {
     </Badge>
   );
 }
+
+// Amazon listing status workflow
+const NEXT_STATUS: Record<string, { label: string; next: string; className: string }[]> = {
+  ready: [{ label: "Đang up", next: "uploading", className: "bg-cyan-600 hover:bg-cyan-700" }],
+  uploading: [
+    { label: "Đã lên", next: "selling", className: "bg-green-600 hover:bg-green-700" },
+    { label: "Lỗi", next: "error", className: "bg-red-600 hover:bg-red-700" },
+  ],
+  selling: [
+    { label: "Bị gỡ", next: "delisted", className: "bg-red-600 hover:bg-red-700" },
+    { label: "Lỗi", next: "error", className: "bg-orange-600 hover:bg-orange-700" },
+  ],
+  error: [{ label: "Đã sửa", next: "fixed", className: "bg-emerald-600 hover:bg-emerald-700" }],
+  fixed: [{ label: "Đã lên", next: "selling", className: "bg-green-600 hover:bg-green-700" }],
+  delisted: [],
+};
 
 // ─── Main component ─────────────────────────────────────────────────
 export default function IdeaDetailPage() {
@@ -125,6 +151,7 @@ export default function IdeaDetailPage() {
   const [reviewComment, setReviewComment] = useState("");
   const [actionType, setActionType] = useState<"approve" | "reject" | "revise" | null>(null);
   const [photoRevisionInput, setPhotoRevisionInput] = useState("");
+  const [promptExpanded, setPromptExpanded] = useState(false);
   const [labelPrintQty, setLabelPrintQty] = useState(1);
 
   // Sheets
@@ -133,8 +160,8 @@ export default function IdeaDetailPage() {
   const [amzEditOpen, setAmzEditOpen] = useState(false);
   const [etsyEditOpen, setEtsyEditOpen] = useState(false);
 
-  // Idea general form state
-  const [ideaForm, setIdeaForm] = useState({ title: "", description: "", prompt: "" });
+  // Idea general form state — only prompt (title/description belong to Amazon/Etsy)
+  const [ideaForm, setIdeaForm] = useState({ prompt: "" });
 
   // Amazon listing form state
   const [amzForm, setAmzForm] = useState({
@@ -159,11 +186,11 @@ export default function IdeaDetailPage() {
 
   const fetchIdea = useCallback(async () => {
     try {
-      const res = await fetch(`/api/ideas/${id}`);
+      const res = await fetch(`/api/ideas/${id}`, { cache: "no-store" });
       if (!res.ok) { toast.error("Không tìm thấy ý tưởng"); router.push("/ideas"); return; }
       const data = await res.json();
       setIdea(data);
-      setIdeaForm({ title: data.title || "", description: data.description || "", prompt: data.prompt || "" });
+      setIdeaForm({ prompt: data.prompt || "" });
 
       if (data.amazonListing) {
         const a = data.amazonListing;
@@ -245,7 +272,7 @@ export default function IdeaDetailPage() {
     setSaving(true);
     try {
       const res = await fetch(`/api/ideas/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...ideaForm, version: idea.version }) });
-      if (res.ok) { toast.success("Đã cập nhật nội dung ý tưởng"); setEditOpen(false); fetchIdea(); }
+      if (res.ok) { toast.success("Đã cập nhật prompt!"); setEditOpen(false); fetchIdea(); }
       else { const data = await res.json(); toast.error(data.error || "Lỗi cập nhật"); }
     } catch { toast.error("Lỗi hệ thống"); }
     finally { setSaving(false); }
@@ -262,15 +289,37 @@ export default function IdeaDetailPage() {
   };
 
   const handleSaveAmazon = async () => {
+    console.log("=== START handleSaveAmazon ===");
+    console.log("amzForm.asin value:", amzForm.asin);
+    
     setSaving(true);
     try {
+      const payload = { ...amzForm, bulletPoints: amzForm.bulletPoints.filter((b) => b.trim()), galleryImages: amzForm.galleryImages.filter((g) => g.trim()) };
+      console.log("Payload sent to API:", payload);
+
       const res = await fetch(`/api/ideas/${id}/amazon-listing`, {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...amzForm, bulletPoints: amzForm.bulletPoints.filter((b) => b.trim()), galleryImages: amzForm.galleryImages.filter((g) => g.trim()) }),
+        body: JSON.stringify(payload),
       });
-      if (res.ok) { toast.success("Đã lưu Amazon Listing!"); setAmzEditOpen(false); fetchIdea(); }
-      else { const data = await res.json(); toast.error(data.error || "Lỗi lưu Amazon Listing"); }
-    } catch { toast.error("Lỗi hệ thống"); }
+      
+      console.log("API response status:", res.status, res.ok);
+
+      if (res.ok) { 
+        const data = await res.json();
+        console.log("API response data (success):", data);
+        toast.success("Đã lưu Amazon Listing!"); 
+        setAmzEditOpen(false); 
+        fetchIdea(); 
+      }
+      else { 
+        const data = await res.json(); 
+        console.error("API error response:", data);
+        toast.error(data.error || "Lỗi lưu Amazon Listing"); 
+      }
+    } catch (err) { 
+      console.error("handleSaveAmazon caught error:", err);
+      toast.error("Lỗi hệ thống"); 
+    }
     finally { setSaving(false); }
   };
 
@@ -285,6 +334,151 @@ export default function IdeaDetailPage() {
       else { const data = await res.json(); toast.error(data.error || "Lỗi lưu Etsy Listing"); }
     } catch { toast.error("Lỗi hệ thống"); }
     finally { setSaving(false); }
+  };
+
+  const handleListingStatusChange = async (platform: "amazon" | "etsy", newStatus: string) => {
+    if (platform === "amazon") {
+      if (newStatus === "uploading") {
+        const amz = idea?.amazonListing || {};
+        const title = amz.itemName || amzForm.itemName;
+        const highlights = amz.itemHighlights || amzForm.itemHighlights;
+        const desc = amz.description || amzForm.description;
+        const tags = amz.tags || amzForm.tags;
+        const slugs = amz.slugs || amzForm.slugs;
+        
+        let bullets = [];
+        try { bullets = typeof amz.bulletPoints === "string" ? JSON.parse(amz.bulletPoints) : (amz.bulletPoints || []); } catch {}
+        if (bullets.length === 0) bullets = amzForm.bulletPoints;
+        const validBullets = bullets.filter((b: string) => b && b.trim());
+
+        let gallery = [];
+        try { gallery = typeof amz.galleryImages === "string" ? JSON.parse(amz.galleryImages) : (amz.galleryImages || []); } catch {}
+        if (gallery.length === 0) gallery = amzForm.galleryImages;
+        const validGallery = gallery.filter((g: string) => g && g.trim());
+
+        const missing = [];
+        if (!title?.trim()) missing.push("Item Name");
+        if (!highlights?.trim()) missing.push("Item Highlights");
+        if (!desc?.trim()) missing.push("Description");
+        if (validBullets.length < 5) missing.push(`Bullet Points (${validBullets.length}/5)`);
+        if (!tags?.trim()) missing.push("Tags");
+        if (!slugs?.trim()) missing.push("Slug");
+        if (validGallery.length < 9 && !amz.useSharedMainImage) missing.push(`Ảnh (${validGallery.length}/9)`);
+
+        if (missing.length > 0) {
+          toast.error("Sản phẩm chưa đủ điều kiện up! Thiếu: " + missing.join(", "));
+          return;
+        }
+
+        if (!amzForm.sellingAccountId && !idea?.amazonListing?.sellingAccountId) { 
+          toast.error("Vui lòng chọn tài khoản đăng bán trước khi chuyển sang 'Đang up'!"); 
+          setAmzEditOpen(true); 
+          return; 
+        }
+      }
+      if (newStatus === "selling") {
+        const currentAsin = idea?.amazonListing?.asin || amzForm.asin;
+        const currentFnsku = idea?.amazonListing?.fnskuCode || amzForm.fnskuCode;
+        const currentLabel = idea?.amazonListing?.fnskuLabelFileUrl || amzForm.fnskuLabelFileUrl;
+        if (!currentAsin) { 
+          toast.error("Vui lòng nhập ASIN trước khi chuyển sang 'Đã lên'!"); 
+          setAmzEditOpen(true);
+          return; 
+        }
+        if (!currentFnsku && !currentLabel) { 
+          toast.error("Vui lòng thêm FNSKU hoặc Label trước!"); 
+          setAmzEditOpen(true);
+          return; 
+        }
+      }
+      if (newStatus === "error" || newStatus === "delisted") {
+        if (!amzForm.listingStatusReason && !idea?.amazonListing?.listingStatusReason) { toast.error(`Vui lòng nhập lý do ${newStatus === "error" ? "lỗi" : "bị gỡ"}!`); setAmzEditOpen(true); return; }
+      }
+      
+      setAmzForm((prev) => ({ ...prev, listingStatus: newStatus }));
+      
+      try {
+        const res = await fetch(`/api/ideas/${id}/amazon-listing`, {
+          method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ listingStatus: newStatus }),
+        });
+        if (res.ok) { 
+          toast.success(`Trạng thái: ${(listingStatusLabels as Record<string, string>)[newStatus] || newStatus}`); 
+          fetchIdea(); 
+        } else { 
+          const err = await res.json(); 
+          toast.error(err.error || "Lỗi cập nhật trạng thái"); 
+          setAmzForm(prev => ({ ...prev, listingStatus: idea?.amazonListing?.listingStatus || "ready" })); 
+        }
+      } catch (err) {
+        toast.error("Lỗi hệ thống");
+        setAmzForm(prev => ({ ...prev, listingStatus: idea?.amazonListing?.listingStatus || "ready" })); 
+      }
+    } else if (platform === "etsy") {
+      if (newStatus === "uploading") {
+        const etsy = idea?.etsyListing || {};
+        const title = etsy.title || etsyForm.title;
+        const desc = etsy.description || etsyForm.description;
+        const price = etsy.price || etsyForm.price;
+        
+        let tags = [];
+        try { tags = typeof etsy.tags === "string" ? JSON.parse(etsy.tags) : (etsy.tags || []); } catch {}
+        if (tags.length === 0) tags = etsyForm.tags;
+        
+        let gallery = [];
+        try { gallery = typeof etsy.galleryImages === "string" ? JSON.parse(etsy.galleryImages) : (etsy.galleryImages || []); } catch {}
+        if (gallery.length === 0) gallery = etsyForm.galleryImages;
+        const validGallery = gallery.filter((g: string) => g && g.trim());
+
+        const missing = [];
+        if (!title?.trim()) missing.push("Title");
+        if (!desc?.trim()) missing.push("Description");
+        if (tags.length === 0) missing.push("Tags");
+        if (!price) missing.push("Giá");
+        if (validGallery.length === 0 && !etsy.useSharedGallery) missing.push("Gallery Images");
+
+        if (missing.length > 0) {
+          toast.error("Sản phẩm chưa đủ điều kiện up! Thiếu: " + missing.join(", "));
+          return;
+        }
+
+        if (!etsyForm.sellingAccountId && !idea?.etsyListing?.sellingAccountId) { 
+          toast.error("Vui lòng chọn tài khoản đăng bán trước khi chuyển sang 'Đang up'!"); 
+          setEtsyEditOpen(true); 
+          return; 
+        }
+      }
+      if (newStatus === "selling") {
+        if (!etsyForm.listingId && !idea?.etsyListing?.listingId) { 
+          toast.error("Vui lòng nhập Listing ID trước khi chuyển sang 'Đã lên'!"); 
+          setEtsyEditOpen(true);
+          return; 
+        }
+      }
+      if (newStatus === "error" || newStatus === "delisted") {
+        if (!etsyForm.listingStatusReason && !idea?.etsyListing?.listingStatusReason) { toast.error(`Vui lòng nhập lý do ${newStatus === "error" ? "lỗi" : "bị gỡ"}!`); setEtsyEditOpen(true); return; }
+      }
+      
+      setEtsyForm((prev) => ({ ...prev, listingStatus: newStatus }));
+      
+      try {
+        const res = await fetch(`/api/ideas/${id}/etsy-listing`, {
+          method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ listingStatus: newStatus }),
+        });
+        if (res.ok) { 
+          toast.success(`Trạng thái: ${(listingStatusLabels as Record<string, string>)[newStatus] || newStatus}`); 
+          fetchIdea(); 
+        } else { 
+          const err = await res.json(); 
+          toast.error(err.error || "Lỗi cập nhật trạng thái Etsy"); 
+          setEtsyForm(prev => ({ ...prev, listingStatus: idea?.etsyListing?.listingStatus || "ready" })); 
+        }
+      } catch (err) {
+        toast.error("Lỗi hệ thống");
+        setEtsyForm(prev => ({ ...prev, listingStatus: idea?.etsyListing?.listingStatus || "ready" })); 
+      }
+    }
   };
 
   // ─── Render ───────────────────────────────────────────────────────
@@ -308,11 +502,11 @@ export default function IdeaDetailPage() {
   })();
   const mainImageDirectUrl = convertToDirectImageUrl(idea.mainImageUrl);
   const isPartner = (idea as Record<string, unknown>).source === "partner";
-  const showAmazonEtsy = !isPartner && idea.status !== "reviewing";
+  const isNotApproved = idea.status === "reviewing";
 
   return (
     <TooltipProvider delayDuration={200}>
-      <div className="flex flex-col h-[calc(100vh-3.5rem)] overflow-hidden">
+      <div className="flex flex-col h-full overflow-hidden">
         {/* ═══════════════ MAIN 2-COLUMN LAYOUT ═══════════════ */}
         <div className="flex-1 flex overflow-hidden">
 
@@ -322,15 +516,15 @@ export default function IdeaDetailPage() {
             {/* ═══ HEADER BAR ═══ */}
             <div className="shrink-0 flex items-center gap-3 px-4 py-2.5 border-b bg-background/80 backdrop-blur-sm">
               <Button variant="ghost" size="icon" className="shrink-0 h-8 w-8" onClick={() => {
-              const initialLen = parseInt(sessionStorage.getItem("initial_history_length") || "0");
-              if (window.history.length > initialLen) {
-                router.back();
-              } else {
-                router.push("/ideas");
-              }
-            }}>
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
+                const initialLen = parseInt(sessionStorage.getItem("initial_history_length") || "0");
+                if (window.history.length > initialLen) {
+                  router.back();
+                } else {
+                  router.push("/ideas");
+                }
+              }}>
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h1 className="text-lg font-bold tracking-tight">{idea.msku}</h1>
@@ -363,23 +557,30 @@ export default function IdeaDetailPage() {
                 <Tooltip><TooltipTrigger asChild>
                   <Sheet open={editOpen} onOpenChange={setEditOpen}>
                     <SheetTrigger asChild><Button variant="outline" size="icon" className="h-8 w-8"><Pencil className="h-3.5 w-3.5" /></Button></SheetTrigger>
-                    <SheetContent side="right" className="w-[520px] sm:max-w-[520px]">
-                      <SheetHeader><SheetTitle>Chỉnh sửa nội dung</SheetTitle><SheetDescription>{idea.msku}</SheetDescription></SheetHeader>
-                      <ScrollArea className="h-[calc(100vh-8rem)] mt-4">
-                        <div className="space-y-4 pr-4">
-                          <div className="space-y-2"><Label htmlFor="et">Tiêu đề (Item Name)</Label><Input id="et" value={ideaForm.title} onChange={e => setIdeaForm({ ...ideaForm, title: e.target.value })} placeholder="Nhập tiêu đề..." /></div>
-                          <div className="space-y-2"><Label htmlFor="ed">Mô tả sản phẩm</Label><Textarea id="ed" value={ideaForm.description} onChange={e => setIdeaForm({ ...ideaForm, description: e.target.value })} placeholder="Nhập mô tả..." rows={5} className="resize-none" /></div>
-                          <div className="space-y-2"><Label htmlFor="ep">Prompt</Label><Textarea id="ep" value={ideaForm.prompt} onChange={e => setIdeaForm({ ...ideaForm, prompt: e.target.value })} rows={4} className="resize-none" /></div>
-                          <div className="space-y-2"><Label htmlFor="eimg">Ảnh main (URL)</Label><Input id="eimg" value={idea.mainImageUrl || ""} onChange={e => handleUpdateIdea({ mainImageUrl: e.target.value })} placeholder="https://drive.google.com/..." /></div>
+                    <SheetContent side="right" className="w-[520px] sm:max-w-[520px] p-6">
+                      <SheetHeader className="mb-4"><SheetTitle>Chỉnh sửa nội dung</SheetTitle><SheetDescription>{idea.msku}</SheetDescription></SheetHeader>
+                      <div className="flex-1 overflow-y-auto pr-1">
+                        <div className="space-y-5">
+                          <div className="space-y-2">
+                            <Label htmlFor="ep" className="text-xs flex items-center gap-1.5"><Sparkles className="h-3 w-3 text-amber-500" /> Prompt</Label>
+                            <Textarea id="ep" value={ideaForm.prompt} onChange={e => setIdeaForm({ prompt: e.target.value })} placeholder="Nhập prompt..." rows={8} className="resize-none text-sm" />
+                            <p className="text-[10px] text-muted-foreground">Prompt dùng để lưu trữ và tái sử dụng khi cần tạo sản phẩm tương tự.</p>
+                          </div>
+                          <Separator />
+                          <div className="space-y-2">
+                            <Label htmlFor="eimg" className="text-xs flex items-center gap-1.5"><ImageIcon className="h-3 w-3 text-blue-500" /> Ảnh main (URL)</Label>
+                            <Input id="eimg" value={idea.mainImageUrl || ""} onChange={e => handleUpdateIdea({ mainImageUrl: e.target.value })} placeholder="https://drive.google.com/file/d/..." className="h-9 text-sm" />
+                            <p className="text-[10px] text-muted-foreground">Link Google Drive hoặc link ảnh trực tiếp.</p>
+                          </div>
                           <div className="flex justify-end gap-2 pt-2">
-                            <Button variant="outline" onClick={() => { setIdeaForm({ title: idea.title || "", description: idea.description || "", prompt: idea.prompt || "" }); }}><X className="h-4 w-4 mr-1" /> Đặt lại</Button>
+                            <Button variant="outline" onClick={() => { setIdeaForm({ prompt: idea.prompt || "" }); }}><X className="h-4 w-4 mr-1" /> Đặt lại</Button>
                             <Button onClick={handleSaveIdea} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />} Lưu</Button>
                           </div>
                         </div>
-                      </ScrollArea>
+                      </div>
                     </SheetContent>
                   </Sheet>
-                </TooltipTrigger><TooltipContent>Sửa nội dung</TooltipContent></Tooltip>
+                </TooltipTrigger><TooltipContent>Sửa prompt & ảnh</TooltipContent></Tooltip>
 
                 <Tooltip><TooltipTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => router.push(`/ideas/new?cloneFrom=${id}`)} disabled={saving}>
@@ -391,10 +592,10 @@ export default function IdeaDetailPage() {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className={deleteContext.canDelete ? "h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50" : "h-8 w-8 text-muted-foreground opacity-50 cursor-not-allowed"} 
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={deleteContext.canDelete ? "h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50" : "h-8 w-8 text-muted-foreground opacity-50 cursor-not-allowed"}
                           disabled={saving || !deleteContext.canDelete}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -480,89 +681,71 @@ export default function IdeaDetailPage() {
             </div>
 
             {/* ═══ CONTENT AREA ═══ */}
-            <div className="flex-1 flex flex-col overflow-hidden p-4 gap-3">
+            <div className="flex-1 flex flex-col overflow-hidden px-4 pt-2 pb-2">
 
-              {/* ── Content Cards — always visible ── */}
-              <div className="shrink-0">
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Left: Tiêu đề + Mô tả */}
-                  <div className="space-y-2">
-                    {/* Tiêu đề */}
-                    <div className="group/title rounded-lg border bg-card p-3 transition-colors hover:border-primary/20">
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-1.5">
-                          <Type className="h-3 w-3 text-muted-foreground" />
-                          <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Tiêu đề</span>
-                        </div>
-                        <CopyButton text={ideaForm.title || ""} className="h-5 w-5 opacity-0 group-hover/title:opacity-100 transition-opacity" />
-                      </div>
-                      <p className="text-sm font-medium leading-snug line-clamp-2">{ideaForm.title || <span className="text-muted-foreground italic text-xs">Chưa có</span>}</p>
-                    </div>
-                    {/* Mô tả */}
-                    <div className="group/desc rounded-lg border bg-card p-3 transition-colors hover:border-primary/20">
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-1.5">
-                          <AlignLeft className="h-3 w-3 text-muted-foreground" />
-                          <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Mô tả</span>
-                        </div>
-                        <CopyButton text={ideaForm.description || ""} className="h-5 w-5 opacity-0 group-hover/desc:opacity-100 transition-opacity" />
-                      </div>
-                      <p className="text-xs leading-relaxed text-muted-foreground line-clamp-3 whitespace-pre-wrap">{ideaForm.description || <span className="italic">Chưa có</span>}</p>
-                    </div>
+              {/* Review Comment — shown inline if exists */}
+              {idea.reviewComment && (
+                <div className="shrink-0 rounded-lg border border-red-200 bg-red-50/50 dark:bg-red-950/20 dark:border-red-900/50 p-3 mb-3">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <MessageSquareWarning className="h-3 w-3 text-red-500" />
+                    <span className="text-[10px] font-semibold text-red-700 dark:text-red-400 uppercase tracking-wider">Ghi chú Sếp/QL</span>
                   </div>
-
-                  {/* Right: Prompt + Source Links + Review Comment */}
-                  <div className="space-y-2">
-                    {/* Prompt */}
-                    <div className="group/prompt rounded-lg border bg-muted/30 p-3 transition-colors hover:border-primary/20">
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-1.5">
-                          <Sparkles className="h-3 w-3 text-violet-500" />
-                          <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Prompt</span>
-                        </div>
-                        <CopyButton text={idea.prompt || ""} className="h-5 w-5 opacity-0 group-hover/prompt:opacity-100 transition-opacity" />
-                      </div>
-                      <p className="text-xs font-mono leading-relaxed text-muted-foreground line-clamp-3 whitespace-pre-wrap">{idea.prompt || <span className="italic">Chưa có</span>}</p>
-                    </div>
-                    {/* Source Links */}
-                    {sourceLinks.length > 0 && (
-                      <div className="rounded-lg border bg-card p-3">
-                        <div className="flex items-center gap-1.5 mb-1.5">
-                          <Link2 className="h-3 w-3 text-blue-500" />
-                          <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Link sản phẩm gốc</span>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {sourceLinks.map((link: string, i: number) => {
-                            let domain = link;
-                            try { domain = new URL(link).hostname.replace("www.", ""); } catch { }
-                            return <a key={i} href={link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950/60 transition-colors"><ExternalLink className="h-2.5 w-2.5" />{domain}</a>;
-                          })}
-                        </div>
-                      </div>
-                    )}
-                    {/* Review Comment */}
-                    {idea.reviewComment && (
-                      <div className="rounded-lg border border-red-200 bg-red-50/50 dark:bg-red-950/20 dark:border-red-900/50 p-3">
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <MessageSquareWarning className="h-3 w-3 text-red-500" />
-                          <span className="text-[10px] font-semibold text-red-700 dark:text-red-400 uppercase tracking-wider">Ghi chú Sếp/QL</span>
-                        </div>
-                        <p className="text-xs text-red-700 dark:text-red-300 whitespace-pre-wrap line-clamp-2">{idea.reviewComment}</p>
-                      </div>
-                    )}
-                  </div>
+                  <p className="text-xs text-red-700 dark:text-red-300 whitespace-pre-wrap">{idea.reviewComment}</p>
                 </div>
-              </div>
+              )}
 
-              {/* ── Tabs: Amazon / Etsy — internal scroll ── */}
-              <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-                <Tabs defaultValue={showAmazonEtsy ? "amazon" : "content"} className="flex flex-col flex-1 overflow-hidden">
-                  {showAmazonEtsy && (
-                    <TabsList className="shrink-0 w-fit">
-                      <TabsTrigger value="amazon" className="text-xs gap-1"><ShoppingBag className="h-3 w-3" /> Amazon {idea.amazonListing && <Check className="h-3 w-3 text-green-500" />}</TabsTrigger>
-                      <TabsTrigger value="etsy" className="text-xs gap-1"><Store className="h-3 w-3" /> Etsy {idea.etsyListing && <Check className="h-3 w-3 text-green-500" />}</TabsTrigger>
-                    </TabsList>
+              {/* Source Links — domain badges */}
+              {sourceLinks.length > 0 && (
+                <div className="shrink-0 flex items-center gap-1.5 mb-2">
+                  <Link2 className="h-3 w-3 text-blue-500 shrink-0" />
+                  {sourceLinks.map((link: string, i: number) => {
+                    let domain = link;
+                    try { domain = new URL(link).hostname.replace("www.", ""); } catch { }
+                    return (
+                      <a key={i} href={link} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300">
+                        <ExternalLink className="h-2.5 w-2.5" />{domain}
+                      </a>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Prompt — collapsible */}
+              {idea.prompt && (
+                <div className="shrink-0 mb-2">
+                  <button
+                    onClick={() => setPromptExpanded(!promptExpanded)}
+                    className="flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors w-full text-left"
+                  >
+                    <Sparkles className="h-3 w-3 text-amber-500 shrink-0" />
+                    <span className="font-medium uppercase tracking-wider">Prompt</span>
+                    {promptExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                    {!promptExpanded && (
+                      <span className="text-[10px] text-muted-foreground/60 truncate ml-1">{idea.prompt.slice(0, 60)}{idea.prompt.length > 60 ? "..." : ""}</span>
+                    )}
+                  </button>
+                  {promptExpanded && (
+                    <div className="mt-1.5 rounded-md bg-muted/50 border p-2.5 group/prompt relative">
+                      <p className="text-xs whitespace-pre-wrap text-muted-foreground">{idea.prompt}</p>
+                      <CopyButton text={idea.prompt} className="absolute top-1.5 right-1.5 h-5 w-5 opacity-0 group-hover/prompt:opacity-100 transition-opacity" />
+                    </div>
                   )}
+                </div>
+              )}
+
+              {/* ── Tabs: Amazon / Etsy ── */}
+              <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+                <Tabs defaultValue={isNotApproved && !isPartner ? "placeholder" : "amazon"} className="flex flex-col flex-1 overflow-hidden">
+                  <TabsList className="shrink-0 w-fit">
+                    <TabsTrigger value="amazon" className="text-xs gap-1" disabled={isNotApproved && !isPartner}>
+                      <ShoppingBag className="h-3 w-3" /> Amazon{!isNotApproved && idea.amazonListing && statusBadge(idea.amazonListing.listingStatus || "ready", listingStatusLabels)}
+                    </TabsTrigger>
+                    <TabsTrigger value="etsy" className="text-xs gap-1" disabled={isNotApproved && !isPartner}>
+                      <Store className="h-3 w-3" /> Etsy{!isNotApproved && idea.etsyListing && statusBadge(idea.etsyListing.listingStatus || "ready", listingStatusLabels)}
+                    </TabsTrigger>
+                    <TabsTrigger value="placeholder" className="hidden" />
+                  </TabsList>
 
                   {/* ─── Amazon Tab ─── */}
                   <TabsContent value="amazon" className="flex-1 overflow-y-auto mt-2 space-y-3 data-[state=inactive]:hidden pr-1">
@@ -615,18 +798,30 @@ export default function IdeaDetailPage() {
                       </div></CardContent></Card>;
                     })()}
 
+                    {/* FBA/FBM — belongs to Amazon */}
+
                     {/* Amazon Listing Card */}
                     <Card>
                       <CardHeader className="pb-2 flex flex-row items-center justify-between">
-                        <CardTitle className="text-sm">Amazon Listing</CardTitle>
+                        <CardTitle className="text-sm flex items-center gap-3">Amazon Listing
+                          <span className="text-[10px] font-normal text-muted-foreground">Fulfillment:</span>
+                          {idea.status === "published" ? (
+                            <Badge variant="outline" className="text-[11px]">{idea.fulfillmentType}</Badge>
+                          ) : (
+                            <Select value={idea.fulfillmentType} onValueChange={(v) => handleUpdateIdea({ fulfillmentType: v })}>
+                              <SelectTrigger className="h-6 text-[10px] w-16"><SelectValue /></SelectTrigger>
+                              <SelectContent><SelectItem value="FBA">FBA</SelectItem><SelectItem value="FBM">FBM</SelectItem></SelectContent>
+                            </Select>
+                          )}
+                        </CardTitle>
                         <div className="flex items-center gap-1">
                           {idea.amazonListing && (() => { try { const g = typeof idea.amazonListing.galleryImages === "string" ? JSON.parse(idea.amazonListing.galleryImages) : (idea.amazonListing.galleryImages || []); if (g.filter(Boolean).length > 0) return <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { g.filter(Boolean).forEach((url: string) => window.open(convertToDirectImageUrl(url) || url, "_blank")); }}><Download className="h-3 w-3 mr-1" /> Tải {g.filter(Boolean).length} ảnh</Button>; } catch { } return null; })()}
                           <Sheet open={amzEditOpen} onOpenChange={setAmzEditOpen}>
                             <SheetTrigger asChild><Button variant="ghost" size="sm" className="h-7 text-xs"><Pencil className="h-3 w-3 mr-1" /> Sửa</Button></SheetTrigger>
-                            <SheetContent side="right" className="w-[560px] sm:max-w-[560px]">
-                              <SheetHeader><SheetTitle>Sửa Amazon Listing</SheetTitle><SheetDescription>{idea.msku}</SheetDescription></SheetHeader>
-                              <ScrollArea className="h-[calc(100vh-8rem)] mt-4">
-                                <div className="space-y-3 pr-4">
+                            <SheetContent side="right" className="w-[min(92vw,1000px)] sm:max-w-[1000px] p-6 flex flex-col">
+                              <SheetHeader className="shrink-0"><SheetTitle>Sửa Amazon Listing</SheetTitle><SheetDescription>{idea.msku}</SheetDescription></SheetHeader>
+                              <div className="flex-1 overflow-y-auto mt-4 pr-1">
+                                <div className="space-y-3">
                                   <div className="grid grid-cols-2 gap-3">
                                     <div className="space-y-1"><Label className="text-xs">Tài khoản</Label>
                                       <Select value={amzForm.sellingAccountId} onValueChange={v => setAmzForm({ ...amzForm, sellingAccountId: v })}><SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Chọn..." /></SelectTrigger>
@@ -686,7 +881,7 @@ export default function IdeaDetailPage() {
                                     <Button size="sm" onClick={handleSaveAmazon} disabled={saving}>{saving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : null}Lưu</Button>
                                   </div>
                                 </div>
-                              </ScrollArea>
+                              </div>
                             </SheetContent>
                           </Sheet>
                         </div>
@@ -714,7 +909,16 @@ export default function IdeaDetailPage() {
                             {idea.amazonListing?.itemName && <CopyButton text={idea.amazonListing.itemName} className="h-4 w-4 opacity-0 group-hover/iname:opacity-100 transition-opacity shrink-0" />}
                           </div>
                           <div className="flex items-center gap-2 rounded-md bg-muted/40 px-2.5 py-1.5">
-                            <div><span className="text-[10px] text-muted-foreground block">Status</span>{statusBadge(idea.amazonListing?.listingStatus || "ready", listingStatusLabels)}</div>
+                            <div>
+                              <span className="text-[10px] text-muted-foreground block">Status</span>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                {statusBadge(idea.amazonListing?.listingStatus || "ready", listingStatusLabels)}
+                                {(NEXT_STATUS[idea.amazonListing?.listingStatus || "ready"] || []).map(opt => (
+                                  <Button key={opt.next} size="sm" className={`h-6 text-[10px] text-white ${opt.className}`}
+                                    onClick={() => handleListingStatusChange("amazon", opt.next)} disabled={saving}>{opt.label}</Button>
+                                ))}
+                              </div>
+                            </div>
                           </div>
                         </div>
                         {(idea.amazonListing?.listingStatus === "error" || idea.amazonListing?.listingStatus === "delisted") && idea.amazonListing?.listingStatusReason && (
@@ -751,7 +955,11 @@ export default function IdeaDetailPage() {
                         </div>
                         <div className="rounded-md bg-muted/40 px-2.5 py-1.5">
                           <span className="text-[10px] text-muted-foreground block">Tags</span>
-                          {(() => { const tags = (idea.amazonListing?.tags || "").split(";").filter(Boolean); if (tags.length === 0) return <p className="text-xs text-muted-foreground mt-0.5">—</p>; return <div className="flex flex-wrap gap-1 mt-0.5">{tags.map((t: string, i: number) => <Badge key={i} variant="secondary" className="text-[10px]">{t.trim()}</Badge>)}</div>; })()}
+                          {(() => { const tags = (idea.amazonListing?.tags || "").split(";").filter(Boolean); if (tags.length === 0) return <p className="text-xs text-muted-foreground mt-0.5">—</p>; return <div className="flex flex-wrap gap-1 mt-0.5">{tags.map((t: string, i: number) => <Badge key={i} variant="secondary" className="text-[10px] group/tag relative cursor-default">{t.trim()}<span className="absolute -top-1 -right-1 opacity-0 group-hover/tag:opacity-100 flex gap-0.5"><button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(t.trim()); toast.success("Đã copy tag!"); }} className="bg-primary text-primary-foreground rounded-full w-4 h-4 flex items-center justify-center text-[8px]" title="Copy tag">C</button><a href={`https://www.amazon.com/s?k=${encodeURIComponent(t.trim())}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="bg-blue-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[8px]" title="Tìm trên Amazon"><ExternalLink className="h-2 w-2" /></a></span></Badge>)}</div>; })()}
+                        </div>
+                        <div className="rounded-md bg-muted/40 px-2.5 py-1.5">
+                          <span className="text-[10px] text-muted-foreground block">Ảnh Gallery ({(() => { try { const g = JSON.parse(idea.amazonListing?.galleryImages || "[]").filter(Boolean); return g.length; } catch { return 0; } })()}/9)</span>
+                          {(() => { try { const g = JSON.parse(idea.amazonListing?.galleryImages || "[]").filter(Boolean); const count = g.length; if (count === 0) return <p className="text-xs text-red-500 mt-0.5 flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> Chưa có ảnh, cần up ít nhất 1 ảnh</p>; if (count < 9) return <p className="text-xs text-amber-500 mt-0.5 flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> Chưa đủ {count}/9 ảnh</p>; return <p className="text-xs text-green-600 mt-0.5 flex items-center gap-1"><Check className="h-3 w-3" /> Đã đủ 9 ảnh</p>; } catch { return <p className="text-xs text-red-500 mt-0.5">Chưa có ảnh</p>; } })()}
                         </div>
                         <div className="rounded-md bg-muted/40 px-2.5 py-1.5">
                           <span className="text-[10px] text-muted-foreground block">Slugs</span>
@@ -789,10 +997,10 @@ export default function IdeaDetailPage() {
                           {idea.etsyListing && (() => { try { const g = typeof idea.etsyListing.galleryImages === "string" ? JSON.parse(idea.etsyListing.galleryImages) : (idea.etsyListing.galleryImages || []); if (g.filter(Boolean).length > 0) return <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { g.filter(Boolean).forEach((url: string) => window.open(convertToDirectImageUrl(url) || url, "_blank")); }}><Download className="h-3 w-3 mr-1" /> Tải {g.filter(Boolean).length} ảnh</Button>; } catch { } return null; })()}
                           <Sheet open={etsyEditOpen} onOpenChange={setEtsyEditOpen}>
                             <SheetTrigger asChild><Button variant="ghost" size="sm" className="h-7 text-xs"><Pencil className="h-3 w-3 mr-1" /> Sửa</Button></SheetTrigger>
-                            <SheetContent side="right" className="w-[560px] sm:max-w-[560px]">
-                              <SheetHeader><SheetTitle>Sửa Etsy Listing</SheetTitle><SheetDescription>{idea.msku}</SheetDescription></SheetHeader>
-                              <ScrollArea className="h-[calc(100vh-8rem)] mt-4">
-                                <div className="space-y-3 pr-4">
+                            <SheetContent side="right" className="w-[min(92vw,1000px)] sm:max-w-[1000px] p-6 flex flex-col">
+                              <SheetHeader className="shrink-0"><SheetTitle>Sửa Etsy Listing</SheetTitle><SheetDescription>{idea.msku}</SheetDescription></SheetHeader>
+                              <div className="flex-1 overflow-y-auto mt-4 pr-1">
+                                <div className="space-y-3">
                                   <div className="grid grid-cols-2 gap-3">
                                     <div className="space-y-1"><Label className="text-xs">Tài khoản</Label>
                                       <Select value={etsyForm.sellingAccountId} onValueChange={v => setEtsyForm({ ...etsyForm, sellingAccountId: v })}><SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Chọn..." /></SelectTrigger>
@@ -841,7 +1049,7 @@ export default function IdeaDetailPage() {
                                     <Button size="sm" onClick={handleSaveEtsy} disabled={saving}>{saving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : null}Lưu</Button>
                                   </div>
                                 </div>
-                              </ScrollArea>
+                              </div>
                             </SheetContent>
                           </Sheet>
                         </div>
@@ -864,7 +1072,14 @@ export default function IdeaDetailPage() {
                             </div>
                           </div>
                           <div className="rounded-md bg-muted/40 px-2.5 py-1.5">
-                            <span className="text-[10px] text-muted-foreground block">Status</span>{statusBadge(idea.etsyListing?.listingStatus || "ready", listingStatusLabels)}
+                            <span className="text-[10px] text-muted-foreground block">Status</span>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              {statusBadge(idea.etsyListing?.listingStatus || "ready", listingStatusLabels)}
+                              {(NEXT_STATUS[idea.etsyListing?.listingStatus || "ready"] || []).map(opt => (
+                                <Button key={opt.next} size="sm" className={`h-6 text-[10px] text-white ${opt.className}`}
+                                  onClick={() => handleListingStatusChange("etsy", opt.next)} disabled={saving}>{opt.label}</Button>
+                              ))}
+                            </div>
                           </div>
                         </div>
                         {(idea.etsyListing?.listingStatus === "error" || idea.etsyListing?.listingStatus === "delisted") && idea.etsyListing?.listingStatusReason && (
@@ -895,8 +1110,10 @@ export default function IdeaDetailPage() {
                     </Card>
                   </TabsContent>
 
-                  {/* Partner fallback */}
-                  {isPartner && <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">Sản phẩm đối tác — không có nội dung đăng bán</div>}
+                  {/* Placeholder tab for unapproved ideas */}
+                  <TabsContent value="placeholder" className="flex-1 flex items-center justify-center text-muted-foreground text-sm data-[state=inactive]:hidden">
+                    {isPartner ? "Sản phẩm đối tác — không có nội dung đăng bán" : "Ý tưởng chưa được duyệt. Vui lòng đợi Sếp/QL duyệt."}
+                  </TabsContent>
                 </Tabs>
               </div>
             </div>
@@ -942,11 +1159,6 @@ export default function IdeaDetailPage() {
                 <div className="flex items-center gap-1.5"><Package className="h-3 w-3 text-muted-foreground" /><span className="text-[10px] text-muted-foreground">MSKU</span></div>
                 <div className="flex items-center gap-1"><code className="text-[11px] bg-muted px-1.5 py-0.5 rounded font-mono">{idea.msku}</code><CopyButton text={idea.msku} className="h-4 w-4 opacity-0 group-hover/msku:opacity-100 transition-opacity" /></div>
               </div>
-
-              <Separator className="my-1" />
-
-              <div className="flex items-center justify-between px-1 py-0.5"><div className="flex items-center gap-1.5"><ImageIcon className="h-3 w-3 text-muted-foreground" /><span className="text-[10px] text-muted-foreground">Ảnh</span></div>{statusBadge(idea.photoStatus, photoStatusLabels)}</div>
-              <div className="flex items-center justify-between px-1 py-0.5"><div className="flex items-center gap-1.5"><FileText className="h-3 w-3 text-muted-foreground" /><span className="text-[10px] text-muted-foreground">File</span></div>{statusBadge(idea.fileStatus, fileStatusLabels)}</div>
 
               <Separator className="my-1" />
 
@@ -1174,24 +1386,26 @@ export default function IdeaDetailPage() {
                     </div>
                   )}
 
-                  {canManagePhotos && <>
+                  <>
                     <Separator className="my-1" />
-                    <div className="flex items-center justify-between px-1 py-0.5"><span className="text-[10px] text-muted-foreground">Trạng thái file</span>{statusBadge(idea.fileStatus, fileStatusLabels)}</div>
-                    <div className="space-y-1 px-1">
-                      <span className="text-[10px] text-muted-foreground">Link file SX</span>
-                      {idea.productionFileUrl ? <a href={idea.productionFileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-blue-600 hover:underline text-xs"><ExternalLink className="h-3 w-3" /> Mở file</a> : <p className="text-muted-foreground italic text-xs">Chưa có</p>}
-                    </div>
-                    {idea.fileStatus === "not_started" && <Button size="sm" className="w-full h-7 text-xs" variant="outline" onClick={() => handleUpdateIdea({ fileStatus: "in_progress" })} disabled={saving}><FileText className="h-3 w-3 mr-1" /> Yêu cầu làm file</Button>}
+                    <div className="flex items-center justify-between px-1 py-0.5"><span className="text-[10px] text-muted-foreground">Trạng thái file</span>{statusBadge(idea.fileStatus || "not_started", fileStatusLabels)}</div>
+                    {idea.productionFileUrl ? (
+                      <div className="space-y-1 px-1">
+                        <a href={idea.productionFileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-blue-600 hover:underline text-xs"><ExternalLink className="h-3 w-3" /> Mở file SX</a>
+                      </div>
+                    ) : canManagePhotos && idea.fileStatus === "not_started" ? (
+                      <Button size="sm" className="w-full h-7 text-xs" variant="outline" onClick={() => handleUpdateIdea({ fileStatus: "in_progress" })} disabled={saving}><FileText className="h-3 w-3 mr-1" /> Yêu cầu làm file</Button>
+                    ) : !canManagePhotos && (
+                      <p className="text-[10px] text-muted-foreground italic px-1">Chưa có file SX</p>
+                    )}
+                  </>
+                  {canManagePhotos && <>
                     {idea.fileStatus === "in_progress" && <Button size="sm" className="w-full h-7 text-xs" onClick={() => { if (!idea.productionFileUrl) { toast.error("Thêm link file!"); return; } handleUpdateIdea({ fileStatus: "pending_review" }); }} disabled={saving}><FileText className="h-3 w-3 mr-1" /> Nộp file</Button>}
                     {idea.fileStatus === "pending_review" && <div className="flex gap-1">
                       <Button size="sm" className="flex-1 h-7 text-xs bg-green-600" onClick={() => { if (!idea.productionFileUrl) { toast.error("Chưa có link!"); return; } handleUpdateIdea({ fileStatus: "approved" }); }} disabled={saving}><ShieldCheck className="h-3 w-3 mr-1" /> Duyệt</Button>
                       <Button size="sm" className="flex-1 h-7 text-xs" variant="outline" onClick={() => handleUpdateIdea({ fileStatus: "revision_requested" })} disabled={saving}><Edit3 className="h-3 w-3 mr-1" /> Sửa</Button>
                     </div>}
                     {idea.fileStatus === "revision_requested" && <Button size="sm" className="w-full h-7 text-xs" onClick={() => { if (!idea.productionFileUrl) { toast.error("Thêm link!"); return; } handleUpdateIdea({ fileStatus: "pending_review" }); }} disabled={saving}><FileText className="h-3 w-3 mr-1" /> Nộp lại</Button>}
-                    <Separator className="my-1" />
-                    <div className="space-y-1 px-1"><span className="text-[10px] text-muted-foreground">Fulfillment</span>
-                      <Select value={idea.fulfillmentType} onValueChange={(v) => handleUpdateIdea({ fulfillmentType: v })}><SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="FBA">FBA</SelectItem><SelectItem value="FBM">FBM</SelectItem></SelectContent></Select>
-                    </div>
                   </>}
                 </div>
               </>

@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { broadcastNotification } from "@/lib/socket-helper";
 import { generateMsku, validateMsku } from "@/lib/msku-generator";
+import { withRateLimit } from "@/lib/rate-limit-helper";
+import { applySecurityHeaders } from "@/lib/security-headers";
 import type { Role } from "@/lib/permissions";
 
 // GET /api/ideas - List ideas with filtering
@@ -12,6 +14,10 @@ export async function GET(req: NextRequest) {
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    // Rate limit: relaxed tier for read operations
+    const { blocked } = withRateLimit(session.user.id, "GET", "/api/ideas");
+    if (blocked) return blocked;
 
     const searchParams = req.nextUrl.searchParams;
     const tab = searchParams.get("tab") || "reviewing";
@@ -145,6 +151,10 @@ export async function POST(req: Request) {
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    // Rate limit: normal tier for create operations
+    const { blocked } = withRateLimit(session.user.id, "POST", "/api/ideas");
+    if (blocked) return blocked;
 
     const body = await req.json();
     const {

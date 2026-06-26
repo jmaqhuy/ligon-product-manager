@@ -98,7 +98,7 @@ export const fileStatusLabels: Record<FileStatus, string> = {
 };
 
 export const listingStatusLabels: Record<ListingStatus, string> = {
-  ready: "Sẵn sàng",
+  ready: "Chưa sẵn sàng",
   uploading: "Đang up",
   uploaded: "Đã lên",
   selling: "Đang bán",

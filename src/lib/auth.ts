@@ -140,16 +140,26 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             select: { id: true, status: true, role: true, fullName: true, nameAbbreviation: true, avatarUrl: true, notificationSettings: true },
           });
           if (!existingUser || existingUser.status !== "active") {
-            // User no longer exists or is inactive — invalidate token
-            token.id = undefined as unknown as string;
-            token.role = undefined as unknown as Role;
+            // User no longer exists or is inactive — invalidate token completely
+            // Must clear ALL identifying fields including NextAuth's built-in sub/name/email
+            return {
+              sub: undefined,
+              id: undefined,
+              role: undefined,
+              fullName: undefined,
+              nameAbbreviation: undefined,
+              avatarUrl: undefined,
+              notificationSettings: undefined,
+              name: undefined,
+              email: undefined,
+            } as unknown as typeof token;
           }
           // Keep token in sync with DB
-          token.role = existingUser!.role as Role;
-          token.fullName = existingUser!.fullName;
-          token.nameAbbreviation = existingUser!.nameAbbreviation;
-          token.avatarUrl = existingUser!.avatarUrl;
-          token.notificationSettings = existingUser!.notificationSettings;
+          token.role = existingUser.role as Role;
+          token.fullName = existingUser.fullName;
+          token.nameAbbreviation = existingUser.nameAbbreviation;
+          token.avatarUrl = existingUser.avatarUrl;
+          token.notificationSettings = existingUser.notificationSettings;
         } catch {
           // DB error — keep existing token to avoid breaking the session
         }
@@ -157,7 +167,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       return token;
     },
     async session({ session, token }) {
-      if (token) {
+      // Only populate user data if token has a valid user ID
+      if (token?.id) {
         session.user.id = token.id;
         session.user.role = token.role;
         session.user.fullName = token.fullName;

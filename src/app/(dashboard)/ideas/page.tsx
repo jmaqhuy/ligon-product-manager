@@ -6,7 +6,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -39,15 +38,8 @@ import {
   X,
   Printer,
   ExternalLink,
-  MoreHorizontal,
   Trash2,
 } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -86,6 +78,7 @@ import {
 import type { Role } from "@/lib/permissions";
 import { convertToDirectImageUrl } from "@/lib/google-drive";
 import { apiFetch } from "@/lib/api-client";
+import { ExcelUpload } from "@/components/excel-upload";
 
 // Status badge colors
 function getStatusBadge(status: IdeaStatus) {
@@ -155,7 +148,8 @@ function IdeaTable({ ideas, loading, selectedIds, onSelectionChange, canSelect }
 }) {
   const router = useRouter();
   const allSelected = ideas.length > 0 && ideas.every((i) => selectedIds.has(i.id));
-  const someSelected = ideas.some((i) => selectedIds.has(i.id));
+
+  // Track if any ideas are selected for batch operations
 
   if (loading) {
     return (
@@ -185,7 +179,7 @@ function IdeaTable({ ideas, loading, selectedIds, onSelectionChange, canSelect }
         <TableHeader>
           <TableRow>
             {canSelect && (
-              <TableHead className="w-[40px]">
+              <TableHead className="w-10">
                 <Checkbox
                   checked={allSelected}
                   onCheckedChange={(checked) => {
@@ -194,14 +188,14 @@ function IdeaTable({ ideas, loading, selectedIds, onSelectionChange, canSelect }
                 />
               </TableHead>
             )}
-            <TableHead className="w-[60px]">Ảnh</TableHead>
+            <TableHead className="w-15">Ảnh</TableHead>
             <TableHead>MSKU</TableHead>
             <TableHead className="hidden md:table-cell">Chủ đề</TableHead>
             <TableHead className="hidden lg:table-cell">Người tạo</TableHead>
             <TableHead>Loại</TableHead>
             <TableHead>Trạng thái</TableHead>
             <TableHead className="hidden md:table-cell">Ảnh</TableHead>
-            <TableHead className="w-[100px] hidden sm:table-cell">Ngày tạo</TableHead>
+            <TableHead className="w-25 hidden sm:table-cell">Ngày tạo</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -256,7 +250,7 @@ function IdeaTable({ ideas, loading, selectedIds, onSelectionChange, canSelect }
                     <div className="min-w-0">
                       <span className="font-mono text-sm font-medium">{idea.msku}</span>
                       {idea.title && (
-                        <p className="text-xs text-muted-foreground truncate max-w-[200px]">{idea.title}</p>
+                        <p className="text-xs text-muted-foreground truncate max-w-50">{idea.title}</p>
                       )}
                     </div>
                     <div onClick={(e) => e.stopPropagation()}>
@@ -309,13 +303,13 @@ export default function IdeasPage() {
   const [loading, setLoading] = useState(true);
   const [topicId, setTopicId] = useState("");
   const [month, setMonth] = useState("");
-  const [topics, setTopics] = useState<any[]>([]);
+  const [topics, setTopics] = useState<{ id: string; name: string }[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchProcessing, setBatchProcessing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [labelDialogOpen, setLabelDialogOpen] = useState(false);
   const [labelSkusInput, setLabelSkusInput] = useState("");
-  const [labelResults, setLabelResults] = useState<any[]>([]);
+  const [labelResults, setLabelResults] = useState<{ id: string; msku?: string; fnskuLabelFileUrl?: string; fnskuCode?: string; quantity?: number }[]>([]);
   const [labelLoading, setLabelLoading] = useState(false);
   const [labelQuantities, setLabelQuantities] = useState<Record<string, number>>({});
   const [page, setPage] = useState(1);
@@ -333,7 +327,7 @@ export default function IdeasPage() {
     });
   }, []);
 
-  const canDeleteIdea = (idea: any) => {
+  const canDeleteIdea = (idea: { createdById?: string; status: string; fileStatus?: string; productionFileUrl?: string | null; photoStatus?: string }) => {
     // Determine if in production (same as backend logic)
     const inProduction = idea.status === "published" || idea.fileStatus === "approved" || !!idea.productionFileUrl;
     if (inProduction) return false;
@@ -359,7 +353,7 @@ export default function IdeasPage() {
     setBatchProcessing(true);
     const { toast } = await import("sonner");
     try {
-      const { data, error } = await apiFetch("/api/ideas/batch", {
+      const { error } = await apiFetch("/api/ideas/batch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -423,7 +417,7 @@ export default function IdeasPage() {
       if (data) {
         setLabelResults(data);
         const qty: Record<string, number> = {};
-        data.forEach((item: any) => { qty[item.id] = item.quantity || 1; });
+        data.forEach((item: { id: string; quantity?: number }) => { qty[item.id] = item.quantity || 1; });
         setLabelQuantities(qty);
       }
     } finally { setLabelLoading(false); }
@@ -445,11 +439,17 @@ export default function IdeasPage() {
   // Sync URL params when they change (tab + mine toggle)
   useEffect(() => {
     const newTab = searchParams.get("tab") || "reviewing";
-    setActiveTab(newTab);
+    if (newTab !== activeTab) {
+      setActiveTab(newTab);
+    }
     const newMine = searchParams.get("mine");
     if (newMine !== null) {
-      setShowMine(newMine === "true");
+      const shouldShowMine = newMine === "true";
+      if (shouldShowMine !== showMine) {
+        setShowMine(shouldShowMine);
+      }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   const fetchIdeas = useCallback(async () => {
@@ -521,12 +521,13 @@ export default function IdeasPage() {
               Tạo ý tưởng
             </Link>
           </Button>
+          <ExcelUpload onSuccess={fetchIdeas} />
         </div>
       </div>
 
       {/* Filters Bar */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
+        <div className="relative flex-1 min-w-50 max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Tìm theo SKU / MSKU..."
@@ -542,7 +543,7 @@ export default function IdeasPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Tất cả chủ đề</SelectItem>
-            {topics.map((t: any) => (
+            {topics.map((t: { id: string; name: string }) => (
               <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
             ))}
           </SelectContent>
@@ -610,7 +611,7 @@ export default function IdeasPage() {
                   } else if (data) {
                     setLabelResults(data);
                     const qty: Record<string, number> = {};
-                    data.forEach((item: any) => { qty[item.id] = item.quantity || 1; });
+                    data.forEach((item: { id: string; quantity?: number }) => { qty[item.id] = item.quantity || 1; });
                     setLabelQuantities(qty);
                   }
                 } finally { setLabelLoading(false); }
@@ -753,16 +754,16 @@ export default function IdeasPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[60px]">Ảnh</TableHead>
+                        <TableHead className="w-15">Ảnh</TableHead>
                         <TableHead>MSKU</TableHead>
-                        <TableHead className="w-[80px]">SL</TableHead>
+                        <TableHead className="w-20">SL</TableHead>
                         <TableHead>FNSKU</TableHead>
-                        <TableHead className="w-[80px]">In</TableHead>
+                        <TableHead className="w-20">In</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {labelResults.map((item) => {
-                        const previewUrl = convertToDirectImageUrl(item.fnskuLabelFileUrl);
+                        const previewUrl = convertToDirectImageUrl(item.fnskuLabelFileUrl || "");
                         return (
                         <TableRow key={item.id}>
                           <TableCell>
@@ -814,7 +815,7 @@ export default function IdeasPage() {
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-muted-foreground">{labelResults.length} sản phẩm</span>
-                  <Button variant="default" onClick={handleOpenAllLabels} disabled={!labelResults.some((i: any) => i.fnskuLabelFileUrl)}>
+                  <Button variant="default" onClick={handleOpenAllLabels} disabled={!labelResults.some((i: { fnskuLabelFileUrl?: string }) => i.fnskuLabelFileUrl)}>
                     <Printer className="h-4 w-4 mr-2" /> Mở tất cả label
                   </Button>
                 </div>

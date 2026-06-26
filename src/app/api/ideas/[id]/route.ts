@@ -414,8 +414,8 @@ export async function DELETE(
         await tx.productionRequest.deleteMany({ where: { ideaId: id } });
       }
       
-      // Delete ShipmentBoxItems referencing this idea
-      await tx.shipmentBoxItem.deleteMany({ where: { ideaId: id } });
+      // Delete ShipmentItems referencing this idea (cascades to ShipmentBoxItems)
+      await tx.shipmentItem.deleteMany({ where: { ideaId: id } });
       
       // Delete audit logs associated
       await tx.auditLog.deleteMany({ where: { entityType: "idea", entityId: id } });

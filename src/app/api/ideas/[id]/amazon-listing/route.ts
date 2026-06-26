@@ -58,9 +58,71 @@ export async function PUT(
     // Track audit changes
     const auditEntries: { field: string; oldVal: string | null; newVal: string | null }[] = [];
     if (existing) {
+      console.log(`[ASIN Debug] existing.asin = ${existing.asin}, new asin = ${asin}`);
       if (asin !== undefined && asin !== existing.asin) auditEntries.push({ field: "asin", oldVal: existing.asin, newVal: asin });
       if (listingStatus !== undefined && listingStatus !== existing.listingStatus) auditEntries.push({ field: "listingStatus", oldVal: existing.listingStatus, newVal: listingStatus });
+    } else {
+      console.log(`[ASIN Debug] No existing listing, creating new one. new asin = ${asin}`);
     }
+
+    // --- Backend Validation for Listing Status Transitions ---
+    if (listingStatus === "uploading") {
+      const finalTitle = itemName ?? existing?.itemName ?? idea.title;
+      const finalHighlights = itemHighlights ?? existing?.itemHighlights;
+      const finalDesc = description ?? existing?.description ?? idea.description;
+      const finalTags = tags ?? existing?.tags;
+      const finalSlugs = slugs ?? existing?.slugs;
+      
+      let finalBullets = [];
+      if (bulletPoints) finalBullets = bulletPoints;
+      else if (existing?.bulletPoints) { try { finalBullets = JSON.parse(existing.bulletPoints); } catch {} }
+      const validBullets = finalBullets.filter((b: string) => b && b.trim());
+
+      let finalGallery = [];
+      if (galleryImages) finalGallery = galleryImages;
+      else if (existing?.galleryImages) { try { finalGallery = JSON.parse(existing.galleryImages); } catch {} }
+      const validGallery = finalGallery.filter((g: string) => g && g.trim());
+
+      const finalSharedMain = useSharedMainImage ?? existing?.useSharedMainImage ?? true;
+      const finalAccountId = sellingAccountId ?? existing?.sellingAccountId;
+
+      const missing = [];
+      if (!finalTitle?.trim()) missing.push("Item Name");
+      if (!finalHighlights?.trim()) missing.push("Item Highlights");
+      if (!finalDesc?.trim()) missing.push("Description");
+      if (validBullets.length < 5) missing.push(`Bullet Points (${validBullets.length}/5)`);
+      if (!finalTags?.trim()) missing.push("Tags");
+      if (!finalSlugs?.trim()) missing.push("Slug");
+      if (validGallery.length < 9 && !finalSharedMain) missing.push(`Ảnh (${validGallery.length}/9)`);
+
+      if (missing.length > 0) {
+        return NextResponse.json({ error: "Sản phẩm chưa đủ điều kiện up! Thiếu: " + missing.join(", ") }, { status: 400 });
+      }
+      if (!finalAccountId) {
+        return NextResponse.json({ error: "Vui lòng chọn tài khoản đăng bán!" }, { status: 400 });
+      }
+    }
+
+    if (listingStatus === "selling") {
+      const finalAsin = asin ?? existing?.asin;
+      const finalFnsku = fnskuCode ?? existing?.fnskuCode;
+      const finalLabel = fnskuLabelFileUrl ?? existing?.fnskuLabelFileUrl;
+      
+      if (!finalAsin) {
+        return NextResponse.json({ error: "Vui lòng nhập ASIN trước khi chuyển sang 'Đã lên'!" }, { status: 400 });
+      }
+      if (!finalFnsku && !finalLabel) {
+        return NextResponse.json({ error: "Vui lòng thêm FNSKU hoặc Label trước!" }, { status: 400 });
+      }
+    }
+
+    if (listingStatus === "error" || listingStatus === "delisted") {
+      const finalReason = listingStatusReason ?? existing?.listingStatusReason;
+      if (!finalReason) {
+        return NextResponse.json({ error: `Vui lòng nhập lý do ${listingStatus === "error" ? "lỗi" : "bị gỡ"}!` }, { status: 400 });
+      }
+    }
+    // ---------------------------------------------------------
 
     const listing = await db.amazonListing.upsert({
       where: { ideaId: id },
@@ -111,6 +173,8 @@ export async function PUT(
         photosUploaded: photosUploaded ?? false,
       },
     });
+
+    console.log(`[ASIN Debug] upsert completed. resulting listing.asin = ${listing.asin}`);
 
     // Create audit logs for Amazon listing changes
     for (const entry of auditEntries) {

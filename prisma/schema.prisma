@@ -86,7 +86,7 @@ model Idea {
   amazonListing      AmazonListing?
   etsyListing        EtsyListing?
   productionRequests ProductionRequest[]
-  shipmentBoxItems   ShipmentBoxItem[]
+  shipmentItems      ShipmentItem[]
   partner            Partner?            @relation(fields: [partnerId], references: [id])
 
   @@map("ideas")
@@ -176,7 +176,7 @@ model SellingAccount {
   amazonListings AmazonListing[]
   etsyListings   EtsyListing[]
   orders         Order[]
-  shipmentBoxes  ShipmentBox[]
+  shipments      Shipment[]
 
   @@map("selling_accounts")
 }
@@ -194,6 +194,7 @@ model ProductionRequest {
   requestedAt    DateTime  @default(now()) @map("requested_at")
   completedAt    DateTime? @map("completed_at")
   noteForWorkers String?   @map("note_for_workers")
+  shipped        Boolean   @default(false)
   version        Int       @default(1)
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
@@ -201,6 +202,7 @@ model ProductionRequest {
   // Relations
   idea  Idea             @relation(fields: [ideaId], references: [id])
   steps ProductionStep[]
+  shipmentItems ShipmentItem[]
 
   @@map("production_requests")
 }
@@ -271,43 +273,83 @@ model Order {
 // ============================
 // Module 8: Shipments
 // ============================
-model ShipmentBox {
-  id              String   @id @default(cuid())
-  shipDate        DateTime @map("ship_date")
-  amazonAccountId String   @map("amazon_account_id")
-  shipmentId      String   @map("shipment_id") // Amazon shipment ID
-  boxName         String   @map("box_name")
-  warehouseCode   String   @map("warehouse_code")
-  labelFileUrl    String?  @map("label_file_url")
-  shipLine        String?  @map("ship_line") // SEA | SBay | Air VNL | custom
-  lengthCm        Float?   @map("length_cm")
-  widthCm         Float?   @map("width_cm")
-  heightCm        Float?   @map("height_cm")
-  weightKg        Float?   @map("weight_kg")
-  trackingNumber  String?  @map("tracking_number")
-  version         Int      @default(1)
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+
+// Lô hàng gửi đi Amazon FBA
+model Shipment {
+  id              String    @id @default(cuid())
+  status          String    @default("draft") // draft | packing | ready | in_transit | received
+  plannedShipDate DateTime  @map("planned_ship_date")
+  actualShipDate  DateTime? @map("actual_ship_date")
+  shipLine        String?   @map("ship_line") // SEA / SBay / Air VNL — chung cho cả lô
+  amazonAccountId String    @map("amazon_account_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  amazonAccount SellingAccount    @relation(fields: [amazonAccountId], references: [id])
-  items         ShipmentBoxItem[]
+  amazonAccount SellingAccount  @relation(fields: [amazonAccountId], references: [id])
+  items         ShipmentItem[]
+  boxes         ShipmentBox[]
+
+  @@map("shipments")
+}
+
+// SKU trong lô hàng — tổng số lượng cần gửi
+model ShipmentItem {
+  id                  String   @id @default(cuid())
+  totalQty            Int      @map("total_qty")
+  shipmentId          String   @map("shipment_id")
+  ideaId              String   @map("idea_id")
+  productionRequestId String?  @map("production_request_id")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  shipment          Shipment           @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  idea              Idea               @relation(fields: [ideaId], references: [id])
+  productionRequest ProductionRequest? @relation(fields: [productionRequestId], references: [id])
+  boxItems          ShipmentBoxItem[]
+
+  @@map("shipment_items")
+}
+
+// Thùng hàng vật lý trong một lô
+model ShipmentBox {
+  id               String    @id @default(cuid())
+  boxName          String    @map("box_name") // Box 1, Box 2, ...
+  amazonShipmentId String?   @map("amazon_shipment_id")
+  warehouseCode    String?   @map("warehouse_code")
+  sourceBoxId      String?   @map("source_box_id") // FK → ShipmentBox — box gốc nếu là bản sao
+  lengthCm         Float?    @map("length_cm")
+  widthCm          Float?    @map("width_cm")
+  heightCm         Float?    @map("height_cm")
+  weightKg         Float?    @map("weight_kg")
+  labelFileUrl     String?   @map("label_file_url")
+  trackingNumber   String?   @map("tracking_number")
+  shipmentId       String    @map("shipment_id")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  shipment   Shipment       @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  sourceBox  ShipmentBox?   @relation("BoxCopies", fields: [sourceBoxId], references: [id])
+  copies     ShipmentBox[]  @relation("BoxCopies")
+  items      ShipmentBoxItem[]
 
   @@map("shipment_boxes")
 }
 
+// Phân bổ SKU vào từng thùng
 model ShipmentBoxItem {
-  id            String   @id @default(cuid())
-  shipmentBoxId String   @map("shipment_box_id")
-  ideaId        String   @map("idea_id")
-  qtyPerBox     Int      @map("qty_per_box")
-  totalBoxCount Int      @map("total_box_count")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id             String   @id @default(cuid())
+  qtyPerBox      Int      @map("qty_per_box") // Số lượng SKU này trong box này
+  shipmentBoxId  String   @map("shipment_box_id")
+  shipmentItemId String   @map("shipment_item_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   // Relations
-  shipmentBox ShipmentBox @relation(fields: [shipmentBoxId], references: [id], onDelete: Cascade)
-  idea        Idea        @relation(fields: [ideaId], references: [id])
+  shipmentBox  ShipmentBox  @relation(fields: [shipmentBoxId], references: [id], onDelete: Cascade)
+  shipmentItem ShipmentItem @relation(fields: [shipmentItemId], references: [id], onDelete: Cascade)
 
   @@map("shipment_box_items")
 }

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { signIn, useSession } from "next-auth/react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,12 +10,34 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, LogIn, AlertCircle } from "lucide-react";
 
-export default function LoginPage() {
+function LoginForm() {
+  const { data: session, status } = useSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
+
+  // Redirect if already logged in with valid user ID
+  useEffect(() => {
+    if (status === "authenticated" && session?.user?.id) {
+      router.replace(callbackUrl);
+    }
+  }, [status, session, router, callbackUrl]);
+
+  // Show loading while checking session
+  if (status === "loading") {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  // Don't render login form if already authenticated with valid session
+  if (status === "authenticated" && session?.user?.id) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,7 +54,7 @@ export default function LoginPage() {
       if (result?.error) {
         setError("Email hoặc mật khẩu không đúng, hoặc tài khoản đã bị vô hiệu hoá");
       } else {
-        router.push("/dashboard");
+        router.push(callbackUrl);
         router.refresh();
       }
     } catch {
@@ -123,5 +145,17 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }

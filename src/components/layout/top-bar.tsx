@@ -46,7 +46,7 @@ function ThemeToggle() {
       </Button>
 
       <div className="absolute right-0 top-full pt-1 hidden group-hover:block z-50">
-        <div className="bg-popover border rounded-md shadow-md p-1 min-w-[8rem]">
+        <div className="bg-popover border rounded-md shadow-md p-1 min-w-32">
           <button
             onClick={() => setTheme("light")}
             className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
@@ -136,11 +136,12 @@ export function TopBar() {
       <div className="ml-auto flex items-center gap-2">
         {/* Online users */}
           <div className="flex items-center -space-x-2 mr-4">
-            {onlineUsers.map((u) => {
+            {onlineUsers.map((u, i) => {
               const isViewingSameIdea =
                 pathname.startsWith("/ideas/") && u.currentPath === pathname;
+              const userKey = `${u.id}-${i}`;
               return (
-                <TooltipProvider key={u.id} delayDuration={0} disableHoverableContent>
+                <TooltipProvider key={userKey} delayDuration={0} disableHoverableContent>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Avatar
@@ -186,11 +187,11 @@ export function TopBar() {
                   Thông báo{unreadCount > 0 ? ` (${unreadCount} chưa đọc)` : ""}
                 </h4>
               </div>
-              <div className="max-h-[300px] overflow-y-auto">
+              <div className="max-h-75 overflow-y-auto">
                 {notifications && notifications.length > 0 ? (
-                  notifications.slice(0, 5).map((n) => (
+                  notifications.slice(0, 5).map((n, i) => (
                     <div
-                      key={n.id || Math.random()}
+                      key={n.id || `notif-${i}-${n.createdAt || ''}`}
                       className={`block p-3 border-b last:border-b-0 hover:bg-muted/50 transition-colors cursor-pointer ${!n.isRead ? "bg-blue-50/30 dark:bg-blue-950/20" : ""}`}
                       onClick={() => {
                         if (n.id && !n.isRead) markAsRead(n.id);

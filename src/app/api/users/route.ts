@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { hash } from "bcryptjs";
 import { can, canManageUser, type Role } from "@/lib/permissions";
 import { findUniqueAbbreviation } from "@/lib/name-abbreviation";
+import { withRateLimit } from "@/lib/rate-limit-helper";
 
 // GET /api/users - List all users
 export async function GET() {
@@ -41,6 +42,10 @@ export async function POST(req: Request) {
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    // Rate limit: strict tier for user creation (sensitive operation)
+    const { blocked } = withRateLimit(session.user.id, "POST", "/api/users");
+    if (blocked) return blocked;
 
     const currentRole = session.user.role as Role;
 

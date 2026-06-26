@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 
-// GET /api/shipments - List shipment boxes
+// GET /api/shipments — List all shipments
 export async function GET(req: NextRequest) {
   try {
     const session = await auth();
@@ -11,40 +11,59 @@ export async function GET(req: NextRequest) {
     }
 
     const searchParams = req.nextUrl.searchParams;
-    const search = searchParams.get("search");
+    const search = searchParams.get("search") || "";
+    const status = searchParams.get("status");
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const where: any = {};
+    if (status) where.status = status;
     if (search) {
       where.OR = [
-        { shipmentId: { contains: search } },
-        { boxName: { contains: search } },
-        { trackingNumber: { contains: search } },
+        { boxes: { some: { amazonShipmentId: { contains: search } } } },
+        { boxes: { some: { boxName: { contains: search } } } },
+        { boxes: { some: { trackingNumber: { contains: search } } } },
+        { amazonAccount: { name: { contains: search } } },
       ];
     }
 
-    const boxes = await db.shipmentBox.findMany({
+    const shipments = await db.shipment.findMany({
       where,
       include: {
-        amazonAccount: { select: { id: true, name: true } },
+        amazonAccount: { select: { id: true, name: true, platform: true } },
         items: {
           include: {
-            idea: { select: { id: true, msku: true, sku: true, title: true } },
+            idea: { select: { id: true, msku: true, sku: true, title: true, mainImageUrl: true, fulfillmentType: true } },
+            productionRequest: { select: { id: true, completedAt: true } },
+            boxItems: {
+              include: {
+                shipmentBox: { select: { id: true, boxName: true } },
+              },
+            },
           },
         },
+        boxes: {
+          include: {
+            items: {
+              include: {
+                shipmentItem: { select: { id: true, idea: { select: { msku: true } } } },
+              },
+            },
+          },
+          orderBy: { boxName: "asc" },
+        },
       },
-      orderBy: { shipDate: "desc" },
+      orderBy: { createdAt: "desc" },
       take: 100,
     });
 
-    return NextResponse.json(boxes);
+    return NextResponse.json(shipments);
   } catch (error) {
     console.error("GET /api/shipments error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
-// POST /api/shipments - Create shipment box
+// POST /api/shipments — Create new shipment (draft)
 export async function POST(req: Request) {
   try {
     const session = await auth();
@@ -53,34 +72,52 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const {
-      shipDate, amazonAccountId, shipmentId, boxName,
-      warehouseCode, labelFileUrl, shipLine,
-      lengthCm, widthCm, heightCm, weightKg, trackingNumber,
-    } = body;
+    const { amazonAccountId, plannedShipDate, items } = body;
 
-    if (!shipDate || !amazonAccountId || !shipmentId || !boxName || !warehouseCode) {
-      return NextResponse.json({ error: "Thiếu thông tin bắt buộc" }, { status: 400 });
+    if (!amazonAccountId) {
+      return NextResponse.json(
+        { error: "Thiếu thông tin bắt buộc (tài khoản Amazon)" },
+        { status: 400 }
+      );
     }
 
-    const box = await db.shipmentBox.create({
+    // Validate account is Amazon
+    const account = await db.sellingAccount.findUnique({
+      where: { id: amazonAccountId },
+    });
+    if (!account || account.platform !== "amazon") {
+      return NextResponse.json(
+        { error: "Tài khoản không hợp lệ (cần tài khoản Amazon)" },
+        { status: 400 }
+      );
+    }
+
+    const shipment = await db.shipment.create({
       data: {
-        shipDate: new Date(shipDate),
+        status: "draft",
+        plannedShipDate: plannedShipDate ? new Date(plannedShipDate) : new Date(),
         amazonAccountId,
-        shipmentId,
-        boxName,
-        warehouseCode,
-        labelFileUrl: labelFileUrl || null,
-        shipLine: shipLine || null,
-        lengthCm: lengthCm ? parseFloat(lengthCm) : null,
-        widthCm: widthCm ? parseFloat(widthCm) : null,
-        heightCm: heightCm ? parseFloat(heightCm) : null,
-        weightKg: weightKg ? parseFloat(weightKg) : null,
-        trackingNumber: trackingNumber || null,
+        items: items?.length
+          ? {
+              create: items.map((item: { ideaId: string; totalQty: number; productionRequestId?: string }) => ({
+                ideaId: item.ideaId,
+                totalQty: item.totalQty,
+                productionRequestId: item.productionRequestId || null,
+              })),
+            }
+          : undefined,
+      },
+      include: {
+        amazonAccount: { select: { id: true, name: true, platform: true } },
+        items: {
+          include: {
+            idea: { select: { id: true, msku: true, sku: true, title: true, mainImageUrl: true } },
+          },
+        },
       },
     });
 
-    return NextResponse.json(box, { status: 201 });
+    return NextResponse.json(shipment, { status: 201 });
   } catch (error) {
     console.error("POST /api/shipments error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

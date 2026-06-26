@@ -601,49 +601,58 @@ async function main() {
   }
   console.log(`✅ ${notifications.length} notifications created`);
 
-  // ─── SHIPMENT BOX (for FBA Baby Milestone) ───
-  await prisma.shipmentBox.create({
+  // ─── SHIPMENT (new structure) ───
+  const shipment = await prisma.shipment.create({
     data: {
-      shipDate: new Date("2026-05-05"),
-      amazonAccountId: amzAccount.id,
-      shipmentId: "FBA18GH2K9P",
-      boxName: "Box A-1",
-      warehouseCode: "PHX7",
+      status: "ready",
+      plannedShipDate: new Date("2026-05-05"),
       shipLine: "Air VNL",
-      lengthCm: 45,
-      widthCm: 35,
-      heightCm: 25,
-      weightKg: 8.5,
-      trackingNumber: "VNL-2026050501",
+      amazonAccountId: amzAccount.id,
       items: {
         create: [
-          { ideaId: idea2.id, qtyPerBox: 24, totalBoxCount: 2 },
+          { ideaId: idea2.id, totalQty: 48 },
+        ],
+      },
+      boxes: {
+        create: [
+          {
+            boxName: "Box 1",
+            amazonShipmentId: "FBA18GH2K9P",
+            warehouseCode: "PHX7",
+            lengthCm: 45,
+            widthCm: 35,
+            heightCm: 25,
+            weightKg: 8.5,
+            trackingNumber: "VNL-2026050501",
+          },
+          {
+            boxName: "Box 2",
+            amazonShipmentId: "FBA18GH2K9P",
+            warehouseCode: "PHX7",
+            lengthCm: 45,
+            widthCm: 35,
+            heightCm: 25,
+            weightKg: 8.2,
+            trackingNumber: "VNL-2026050502",
+          },
         ],
       },
     },
+    include: { items: true, boxes: true },
   });
 
-  await prisma.shipmentBox.create({
-    data: {
-      shipDate: new Date("2026-05-05"),
-      amazonAccountId: amzAccount.id,
-      shipmentId: "FBA18GH2K9P",
-      boxName: "Box A-2",
-      warehouseCode: "PHX7",
-      shipLine: "Air VNL",
-      lengthCm: 45,
-      widthCm: 35,
-      heightCm: 25,
-      weightKg: 8.2,
-      trackingNumber: "VNL-2026050502",
-      items: {
-        create: [
-          { ideaId: idea2.id, qtyPerBox: 24, totalBoxCount: 2 },
-        ],
-      },
-    },
-  });
-  console.log("✅ 2 shipment boxes created (FBA Baby Milestone)");
+  // Add box items
+  const boxes = await prisma.shipmentBox.findMany({ where: { shipmentId: shipment.id } });
+  const shipmentItem = shipment.items[0];
+  if (shipmentItem && boxes.length === 2) {
+    await prisma.shipmentBoxItem.createMany({
+      data: [
+        { shipmentBoxId: boxes[0].id, shipmentItemId: shipmentItem.id, qtyPerBox: 24 },
+        { shipmentBoxId: boxes[1].id, shipmentItemId: shipmentItem.id, qtyPerBox: 24 },
+      ],
+    });
+  }
+  console.log("✅ Shipment created with 2 boxes (FBA Baby Milestone)");
 
   console.log("\n🎉 Demo data seeded successfully!");
 }
