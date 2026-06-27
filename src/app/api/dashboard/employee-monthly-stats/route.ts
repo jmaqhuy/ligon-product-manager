@@ -61,7 +61,7 @@ export async function GET() {
 
       const m = statsMap[empKey].months[month];
       m.ideasCreated++;
-      if (idea.status === "approved" || idea.status === "published") m.ideasApproved++;
+      if (idea.status === "approved") m.ideasApproved++;
       // Count photos done (photoStatus = approved means photos are done)
       // We track via amazon/etsy gallery images count or photo_status
       if (idea.amazonListing?.videoUrl) m.videosDone++;
@@ -69,21 +69,7 @@ export async function GET() {
       if (idea.amazonListing?.contentAPlusUrl) m.contentAPlusDone++;
     }
 
-    // Also count photos done from ideas with approved photo status
-    const photosData = await db.idea.groupBy({
-      by: ["createdById", "photoStatus"],
-      where: { ...userFilter, photoStatus: "approved" },
-      _count: { id: true },
-    });
-
-    // Inject photo counts into stats
-    for (const row of photosData) {
-      const empKey = row.createdById;
-      if (statsMap[empKey]) {
-        // We don't have month-level for photos, so add to the latest month or create a total
-        // For simplicity, distribute across months proportionally or add as separate field
-      }
-    }
+    // Removed unused photo data processing
 
     // Flatten to array, sort by employee name
     const result = Object.values(statsMap).sort((a: any, b: any) =>

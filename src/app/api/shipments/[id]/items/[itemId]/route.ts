@@ -37,7 +37,7 @@ export async function PATCH(
       where: { id: itemId },
       data,
       include: {
-        idea: { select: { id: true, msku: true, sku: true, title: true } },
+        idea: { select: { id: true, msku: true, amazonListing: { select: { sku: true } } } },
       },
     });
 

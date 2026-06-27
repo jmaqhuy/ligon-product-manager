@@ -20,17 +20,19 @@ async function getStats(userId: string, role: Role) {
       where: {
         ...ideaWhere,
         status: "approved",
-        photoStatus: { in: ["not_requested", "awaiting_photos", "pending_approval", "revision_requested"] },
+        OR: [{ amazonListing: { is: { photoStatus: { in: ["not_requested", "awaiting_photos", "pending_approval", "revision_requested"] } } } }, { etsyListing: { is: { photoStatus: { in: ["not_requested", "awaiting_photos", "pending_approval", "revision_requested"] } } } }],
       },
     }),
     db.idea.count({
       where: {
         ...ideaWhere,
-        photoStatus: "approved",
-        status: { not: "published" },
+        AND: [
+          { OR: [{ amazonListing: { is: { photoStatus: "approved" } } }, { etsyListing: { is: { photoStatus: "approved" } } }] },
+          { OR: [{ amazonListing: { is: { listingStatus: { not: "published" } } } }, { etsyListing: { is: { listingStatus: { not: "published" } } } }] }
+        ],
       },
     }),
-    db.idea.count({ where: { ...ideaWhere, status: "published" } }),
+    db.idea.count({ where: { ...ideaWhere, OR: [{ amazonListing: { is: { listingStatus: "published" } } }, { etsyListing: { is: { listingStatus: "published" } } }] } }),
     db.productionRequest.count({ where: { completedAt: null, steps: { none: { startedAt: { not: null } } } } }),
     db.productionRequest.count({ where: { completedAt: null, steps: { some: { startedAt: { not: null } } } } }),
     db.order.count({ where: { productionStatus: "producing" } }),
@@ -48,10 +50,10 @@ async function getRecentActivity() {
       select: {
         id: true,
         msku: true,
-        title: true,
         status: true,
         createdAt: true,
-        createdBy: { select: { nameAbbreviation: true } },
+        createdBy: { select: { nameAbbreviation: true, fullName: true } },
+        amazonListing: { select: { itemName: true, sku: true } },
       },
     }),
     db.order.findMany({
@@ -97,7 +99,7 @@ export default async function DashboardPage() {
     const map: Record<string, { label: string; className: string }> = {
       reviewing: { label: "Xem xét", className: "bg-amber-100 text-amber-800 border-amber-200" },
       approved: { label: "Đã duyệt", className: "bg-blue-100 text-blue-800 border-blue-200" },
-      published: { label: "Đã đăng", className: "bg-green-100 text-green-800 border-green-200" },
+      revision_requested: { label: "Yêu cầu sửa", className: "bg-orange-100 text-orange-800 border-orange-200" },
       producing: { label: "Đang SX", className: "bg-orange-100 text-orange-800 border-orange-200" },
       produced: { label: "Đã SX", className: "bg-cyan-100 text-cyan-800 border-cyan-200" },
       awaiting_fulfillment: { label: "Chờ FF", className: "bg-purple-100 text-purple-800 border-purple-200" },
@@ -196,7 +198,9 @@ export default async function DashboardPage() {
                     className="flex items-center justify-between rounded-lg border p-3 hover:bg-muted/50 transition-colors"
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">{idea.title || idea.msku}</p>
+                      <span className="text-sm font-medium truncate block" title={idea.amazonListing?.itemName || idea.amazonListing?.sku || idea.msku}>
+                        {idea.amazonListing?.itemName || idea.amazonListing?.sku || idea.msku}
+                      </span>
                       <div className="flex items-center gap-2 mt-0.5">
                         <code className="text-[10px] bg-muted px-1 py-0.5 rounded font-mono">{idea.msku}</code>
                         <span className="text-[10px] text-muted-foreground">

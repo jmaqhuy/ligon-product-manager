@@ -71,7 +71,7 @@ export async function GET() {
       ideas: {
         reviewing: currentIdeas.filter((i) => i.status === "reviewing").length,
         approved: currentIdeas.filter((i) => i.status === "approved").length,
-        published: currentIdeas.filter((i) => i.status === "published").length,
+        revision_requested: currentIdeas.filter((i) => i.status === "revision_requested").length,
       },
       orders: {
         producing: currentOrders.filter((o) => o.productionStatus === "producing").length,

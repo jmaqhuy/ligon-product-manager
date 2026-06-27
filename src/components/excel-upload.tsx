@@ -12,7 +12,6 @@ import {
 import { Upload, Download, FileSpreadsheet, Loader2, Check, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api-client";
-import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
 
 // ─── Types ───
@@ -239,10 +238,24 @@ export function ExcelUpload({ onSuccess }: { onSuccess?: () => void }) {
 
     try {
       const data = await file.arrayBuffer();
-      const wb = XLSX.read(data, { type: "array" });
-      const sheetName = wb.SheetNames[0];
-      const ws = wb.Sheets[sheetName];
-      const json = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1 });
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(data);
+      const ws = wb.worksheets[0];
+      const json: string[][] = [];
+      ws.eachRow((row) => {
+        // exceljs row.values is 1-indexed
+        const rowValues = (row.values as any[]).slice(1).map(v => {
+          if (!v) return "";
+          if (typeof v === "object") {
+            if (v.richText) return v.richText.map((t: any) => t.text).join("");
+            if (v.text) return v.text;
+            if (v.result !== undefined) return String(v.result);
+            return String(v);
+          }
+          return String(v);
+        });
+        json.push(rowValues);
+      });
 
       if (json.length < 2) {
         toast.error("File Excel trống hoặc không đúng định dạng");

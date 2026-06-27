@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
         amazonAccount: { select: { id: true, name: true, platform: true } },
         items: {
           include: {
-            idea: { select: { id: true, msku: true, sku: true, title: true, mainImageUrl: true, fulfillmentType: true } },
+            idea: { select: { id: true, msku: true, amazonListing: { select: { sku: true } }, mainImageUrl: true } },
             productionRequest: { select: { id: true, completedAt: true } },
             boxItems: {
               include: {
@@ -111,7 +111,7 @@ export async function POST(req: Request) {
         amazonAccount: { select: { id: true, name: true, platform: true } },
         items: {
           include: {
-            idea: { select: { id: true, msku: true, sku: true, title: true, mainImageUrl: true } },
+            idea: { select: { id: true, msku: true, amazonListing: { select: { sku: true } }, mainImageUrl: true } },
           },
         },
       },

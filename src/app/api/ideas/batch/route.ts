@@ -66,16 +66,20 @@ export async function POST(req: NextRequest) {
               results.push({ id, msku: idea.msku, success: false, error: "Không có quyền" });
               continue;
             }
-            await db.idea.update({
-              where: { id },
+            await db.amazonListing.update({
+              where: { ideaId: id },
               data: { photoStatus: "awaiting_photos", version: { increment: 1 } },
-            });
+            }).catch(() => null);
+            await db.etsyListing.update({
+              where: { ideaId: id },
+              data: { photoStatus: "awaiting_photos", version: { increment: 1 } },
+            }).catch(() => null);
             await db.auditLog.create({
               data: {
                 entityType: "idea",
                 entityId: id,
                 fieldName: "photoStatus",
-                oldValue: idea.photoStatus,
+                oldValue: "not_requested", // Approximate
                 newValue: "awaiting_photos",
                 changedById: session.user.id,
               },

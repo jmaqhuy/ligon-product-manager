@@ -17,7 +17,7 @@ export async function POST(req: Request) {
         msku?: string;
         topic: string;
         aiModel: string;
-        fulfillmentType: string;
+        fulfillmentType?: string;
         prompt: string;
         mainImageUrl: string;
         sourceLinks?: string[];
@@ -93,7 +93,6 @@ export async function POST(req: Request) {
         const createdIdea = await db.idea.create({
           data: {
             msku,
-            sku: msku,
             autoGenerateMsku: false,
             createdById: session.user.id,
             topicId,
@@ -101,9 +100,6 @@ export async function POST(req: Request) {
             prompt: idea.prompt || "",
             mainImageUrl: idea.mainImageUrl || "",
             sourceLinks: JSON.stringify((idea.sourceLinks || []).filter(l => l?.trim())),
-            fulfillmentType: idea.fulfillmentType || "FBM",
-            title: idea.title || null,
-            description: idea.description || null,
             widthCm: idea.widthCm || null,
             heightCm: idea.heightCm || null,
             thicknessMm: idea.thicknessMm || null,
@@ -111,6 +107,20 @@ export async function POST(req: Request) {
             source: idea.source || "employee",
             partnerId: partnerId || null,
             partnerLabel: idea.partnerLabel || null,
+            amazonListing: {
+              create: {
+                sku: msku,
+                itemName: idea.title || null,
+                description: idea.description || null,
+                bulletPoints: idea.bulletPoints ? JSON.stringify(idea.bulletPoints) : "[]",
+                tags: idea.tags || null,
+                slugs: idea.slugs || null,
+                fulfillmentType: idea.fulfillmentType || "FBA",
+              }
+            },
+            etsyListing: {
+              create: {}
+            }
           },
           select: { id: true, msku: true },
         });

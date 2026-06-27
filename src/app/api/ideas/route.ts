@@ -41,8 +41,8 @@ export async function GET(req: NextRequest) {
       if (terms.length > 0) {
         where.AND.push({
           OR: terms.flatMap((term: string) => [
-            { sku: { contains: term } },
             { msku: { contains: term } },
+            { amazonListing: { sku: { contains: term } } },
             { amazonListing: { fnskuCode: { contains: term } } },
           ]),
         });
@@ -62,42 +62,25 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    switch (tab) {
-      case "all":
-        // No status filter
-        break;
-      case "reviewing":
-        where.AND.push({
-          OR: [
-            { status: "reviewing" },
-            { needsReReview: true },
-          ],
-        });
-        break;
-      case "photos":
-        where.AND.push({
-          status: "approved",
-          photoStatus: { in: ["not_requested", "awaiting_photos", "pending_approval", "revision_requested"] }
-        });
-        break;
-      case "ready":
-        where.AND.push({
-          photoStatus: "approved",
-          status: { not: "published" }
-        });
-        break;
-      case "published":
-        where.AND.push({ status: "published" });
-        break;
-      case "rejected":
-        where.AND.push({ status: "rejected" });
-        break;
-      default:
-        return NextResponse.json(
-          { error: `Invalid tab: "${tab}". Valid values: all, reviewing, photos, ready, published, rejected` },
-          { status: 400 }
-        );
+    const ideaStatusParam = searchParams.get("ideaStatus");
+    const photoStatusParam = searchParams.get("photoStatus");
+    const amazonStatusParam = searchParams.get("amazonStatus");
+    const etsyStatusParam = searchParams.get("etsyStatus");
+
+    if (ideaStatusParam) {
+      where.AND.push({ status: { in: ideaStatusParam.split(",") } });
     }
+    if (photoStatusParam) {
+      where.AND.push({ photoStatus: { in: photoStatusParam.split(",") } });
+    }
+    if (amazonStatusParam) {
+      where.AND.push({ amazonListing: { listingStatus: { in: amazonStatusParam.split(",") } } });
+    }
+    if (etsyStatusParam) {
+      where.AND.push({ etsyListing: { listingStatus: { in: etsyStatusParam.split(",") } } });
+    }
+
+    // No fallback block needed. If filters are not provided, it will return all ideas matching `where.AND`.
 
     const [ideas, total] = await Promise.all([
       db.idea.findMany({
@@ -106,6 +89,8 @@ export async function GET(req: NextRequest) {
           createdBy: { select: { fullName: true, nameAbbreviation: true } },
           topic: { select: { name: true } },
           partner: { select: { name: true } },
+          amazonListing: { select: { listingStatus: true, fulfillmentType: true, sku: true, photoStatus: true } },
+          etsyListing: { select: { listingStatus: true, photoStatus: true } },
         },
         orderBy: tab === "reviewing" ? { createdAt: "desc" } : { updatedAt: "desc" },
         skip: (page - 1) * pageSize,
@@ -117,18 +102,20 @@ export async function GET(req: NextRequest) {
     const result = ideas.map((idea) => ({
       id: idea.id,
       msku: idea.msku,
-      sku: idea.sku,
+      sku: idea.amazonListing?.sku,
       mainImageUrl: idea.mainImageUrl,
       status: idea.status,
-      photoStatus: idea.photoStatus,
-      fulfillmentType: idea.fulfillmentType,
+      photoStatus: idea.amazonListing?.photoStatus || idea.etsyListing?.photoStatus || "not_requested", amazonPhotoStatus: idea.amazonListing?.photoStatus, etsyPhotoStatus: idea.etsyListing?.photoStatus,
       topicName: idea.topic.name,
       createdByName: idea.createdBy.fullName,
       createdAt: idea.createdAt.toISOString(),
-      title: idea.title,
       needsReReview: idea.needsReReview,
+      reviewComment: idea.reviewComment,
       source: idea.source,
       partnerName: idea.partner?.name,
+      amazonListingStatus: idea.amazonListing?.listingStatus,
+      etsyListingStatus: idea.etsyListing?.listingStatus,
+      fulfillmentType: idea.amazonListing?.fulfillmentType || "FBM",
     }));
 
     return NextResponse.json({
@@ -165,9 +152,6 @@ export async function POST(req: Request) {
       prompt,
       sourceLinks,
       mainImageUrl,
-      fulfillmentType,
-      title,
-      description,
       source,
       partnerId,
       partnerLabel,
@@ -224,7 +208,6 @@ export async function POST(req: Request) {
     const idea = await db.idea.create({
       data: {
         msku,
-        sku: msku, // Default SKU = MSKU
         autoGenerateMsku: autoGenerateMsku !== false,
         createdBy: { connect: { id: session.user.id } },
         topic: { connect: { id: topicId } },
@@ -232,10 +215,7 @@ export async function POST(req: Request) {
         prompt,
         sourceLinks: JSON.stringify(sourceLinks || []),
         mainImageUrl,
-        fulfillmentType: fulfillmentType || "FBM",
         status: finalStatus,
-        title: title || null,
-        description: description || null,
         source: ideaSource,
         ...(ideaSource === "partner" && partnerId ? { partner: { connect: { id: partnerId } } } : {}),
         partnerLabel: partnerLabel || null,
@@ -245,13 +225,17 @@ export async function POST(req: Request) {
         material: material || null,
         amazonListing: {
           create: {
+            sku: msku,
             bulletPoints: bulletPoints ? JSON.stringify(bulletPoints) : JSON.stringify([]),
             tags: tags || null,
             slugs: slugs || null,
+            listingStatus: "not_ready",
           }
         },
         etsyListing: {
-          create: {}
+          create: {
+            listingStatus: "not_ready",
+          }
         }
       },
     });

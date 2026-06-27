@@ -13,6 +13,7 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const { broadcastNotification } = await import("@/lib/socket-helper");
     const { id } = await params;
     const body = await req.json();
 
@@ -24,6 +25,7 @@ export async function PUT(
 
     const {
       sellingAccountId,
+      sku,
       asin,
       fnskuCode,
       fnskuLabelFileUrl,
@@ -43,6 +45,11 @@ export async function PUT(
       vineStatus,
       vineReviewUrl,
       photosUploaded,
+      fulfillmentType,
+      campAuto,
+      photoStatus,
+      photoAssigneeId,
+      photoRevisionNote,
       version,
     } = body;
 
@@ -60,6 +67,7 @@ export async function PUT(
     if (existing) {
       console.log(`[ASIN Debug] existing.asin = ${existing.asin}, new asin = ${asin}`);
       if (asin !== undefined && asin !== existing.asin) auditEntries.push({ field: "asin", oldVal: existing.asin, newVal: asin });
+      if (sku !== undefined && sku !== existing.sku) auditEntries.push({ field: "sku", oldVal: existing.sku, newVal: sku });
       if (listingStatus !== undefined && listingStatus !== existing.listingStatus) auditEntries.push({ field: "listingStatus", oldVal: existing.listingStatus, newVal: listingStatus });
     } else {
       console.log(`[ASIN Debug] No existing listing, creating new one. new asin = ${asin}`);
@@ -67,9 +75,9 @@ export async function PUT(
 
     // --- Backend Validation for Listing Status Transitions ---
     if (listingStatus === "uploading") {
-      const finalTitle = itemName ?? existing?.itemName ?? idea.title;
+      const finalTitle = itemName ?? existing?.itemName;
       const finalHighlights = itemHighlights ?? existing?.itemHighlights;
-      const finalDesc = description ?? existing?.description ?? idea.description;
+      const finalDesc = description ?? existing?.description;
       const finalTags = tags ?? existing?.tags;
       const finalSlugs = slugs ?? existing?.slugs;
       
@@ -128,6 +136,7 @@ export async function PUT(
       where: { ideaId: id },
       update: {
         sellingAccountId: sellingAccountId || null,
+        sku: sku !== undefined ? sku : existing?.sku,
         asin,
         fnskuCode,
         fnskuLabelFileUrl,
@@ -147,18 +156,21 @@ export async function PUT(
         vineStatus,
         vineReviewUrl,
         photosUploaded,
+        fulfillmentType: fulfillmentType ?? existing?.fulfillmentType,
+        campAuto: campAuto ?? existing?.campAuto,
         version: { increment: 1 },
       },
       create: {
         ideaId: id,
         sellingAccountId: sellingAccountId || null,
+        sku: sku || null,
         asin,
         fnskuCode,
         fnskuLabelFileUrl,
-        itemName: itemName || idea.title,
+        itemName: itemName || null,
         itemHighlights,
         bulletPoints: bulletPoints ? JSON.stringify(bulletPoints) : "[]",
-        description: description || idea.description,
+        description: description || null,
         tags,
         slugs,
         price: price ? parseFloat(price) : null,
@@ -171,6 +183,8 @@ export async function PUT(
         vineStatus: vineStatus || "not_enrolled",
         vineReviewUrl,
         photosUploaded: photosUploaded ?? false,
+        fulfillmentType: fulfillmentType || "FBA",
+        campAuto: campAuto ?? false,
       },
     });
 

@@ -36,8 +36,12 @@ export async function PUT(
       useAmazonVideo,
       listingStatus,
       listingStatusReason,
+      photoStatus,
+      photoAssigneeId,
+      photoRevisionNote,
     } = body;
 
+    const existing = await db.etsyListing.findUnique({ where: { ideaId: id } });
     const listing = await db.etsyListing.upsert({
       where: { ideaId: id },
       update: {
@@ -54,15 +58,18 @@ export async function PUT(
         useAmazonVideo: useAmazonVideo ?? false,
         listingStatus,
         listingStatusReason: (listingStatus === "error" || listingStatus === "delisted") ? listingStatusReason : null,
+        photoStatus: photoStatus !== undefined ? photoStatus : undefined,
+        photoAssigneeId: photoAssigneeId !== undefined ? photoAssigneeId : undefined,
+        photoRevisionNote: photoRevisionNote !== undefined ? photoRevisionNote : undefined,
         version: { increment: 1 },
       },
       create: {
         ideaId: id,
         sellingAccountId: sellingAccountId || null,
-        title: title || idea.title,
+        title: title || null,
         listingId,
         tags: tags ? JSON.stringify(tags) : "[]",
-        description: description || idea.description,
+        description: description || null,
         price: price ? parseFloat(price) : null,
         useSharedMainImage: useSharedMainImage ?? true,
         galleryImages: galleryImages ? JSON.stringify(galleryImages) : "[]",
@@ -71,8 +78,41 @@ export async function PUT(
         useAmazonVideo: useAmazonVideo ?? false,
         listingStatus: listingStatus || "ready",
         listingStatusReason: (listingStatus === "error" || listingStatus === "delisted") ? listingStatusReason : null,
+        photoStatus: photoStatus || "not_requested",
+        photoAssigneeId: photoAssigneeId || null,
+        photoRevisionNote: photoRevisionNote || null,
       },
     });
+
+    
+    // Notifications for Photo Management
+    const { broadcastNotification } = await import("@/lib/socket-helper");
+    if (existing) {
+      if (photoStatus === "awaiting_photos" && existing.photoStatus !== "awaiting_photos" && session.user.id !== idea.createdById) {
+        await db.notification.create({
+          data: { userId: idea.createdById, type: "photo_requested", category: "photo", message: `Sếp/Quản lý đã yêu cầu làm ảnh Etsy cho ý tưởng ${idea.msku}.`, actionUrl: `/ideas/${idea.id}` }
+        });
+        broadcastNotification([idea.createdById], { type: "photo_requested", message: `Yêu cầu làm ảnh Etsy cho ý tưởng ${idea.msku}.`, actionUrl: `/ideas/${idea.id}` });
+      }
+      if (photoAssigneeId && photoAssigneeId !== existing.photoAssigneeId && photoAssigneeId !== session.user.id) {
+        await db.notification.create({
+          data: { userId: photoAssigneeId, type: "photo_assigned", category: "photo", message: `Bạn được giao làm ảnh Etsy cho ý tưởng ${idea.msku}.`, actionUrl: `/ideas/${idea.id}` }
+        });
+        broadcastNotification([photoAssigneeId], { type: "photo_assigned", message: `Được giao ảnh Etsy ý tưởng ${idea.msku}.`, actionUrl: `/ideas/${idea.id}` });
+      }
+      if (photoStatus === "approved" && existing.photoStatus !== "approved" && existing.photoAssigneeId) {
+        await db.notification.create({
+          data: { userId: existing.photoAssigneeId, type: "photo_approved", category: "photo", message: `Ảnh Etsy của ${idea.msku} đã được duyệt!`, actionUrl: `/ideas/${idea.id}` }
+        });
+        broadcastNotification([existing.photoAssigneeId], { type: "photo_approved", message: `Ảnh Etsy ${idea.msku} được duyệt!`, actionUrl: `/ideas/${idea.id}` });
+      }
+      if (photoStatus === "revision_requested" && existing.photoStatus !== "revision_requested" && existing.photoAssigneeId) {
+        await db.notification.create({
+          data: { userId: existing.photoAssigneeId, type: "photo_revision_requested", category: "photo", message: `Ảnh Etsy của ${idea.msku} cần chỉnh sửa. Lý do: ${photoRevisionNote || "Không có"}`, actionUrl: `/ideas/${idea.id}` }
+        });
+        broadcastNotification([existing.photoAssigneeId], { type: "photo_revision_requested", message: `Ảnh Etsy ${idea.msku} cần sửa.`, actionUrl: `/ideas/${idea.id}` });
+      }
+    }
 
     return NextResponse.json(listing);
   } catch (error) {

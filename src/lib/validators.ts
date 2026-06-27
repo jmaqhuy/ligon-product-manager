@@ -49,7 +49,6 @@ export const createIdeaSchema = z.object({
 });
 
 export const updateIdeaSchema = z.object({
-  sku: z.string().max(30).optional(),
   topicId: z.string().uuid().optional(),
   aiModelId: z.string().uuid().optional(),
   prompt: z.string().optional(),
@@ -64,7 +63,7 @@ export const updateIdeaSchema = z.object({
   ]).optional(),
   photoAssigneeId: z.string().uuid().optional(),
   photoRevisionNote: z.string().max(500).optional(),
-  status: z.enum(["reviewing", "approved", "published", "rejected"]).optional(),
+  status: z.enum(["reviewing", "revision_requested", "approved", "rejected"]).optional(),
   version: z.number().int().positive(),
   widthCm: z.number().positive().optional(),
   heightCm: z.number().positive().optional(),

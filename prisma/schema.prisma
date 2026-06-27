@@ -28,9 +28,11 @@ model User {
   updatedAt            DateTime @updatedAt @map("updated_at")
 
   // Relations
-  ideas           Idea[]           @relation("CreatedBy")
-  assignedPhotos  Idea[]           @relation("PhotoAssignee")
-  sellingAccounts SellingAccount[] @relation("AccountCreatedBy")
+  ideas                Idea[]           @relation("CreatedBy")
+  assignedFiles        Idea[]           @relation("FileAssignee")
+  amazonAssignedPhotos AmazonListing[]  @relation("AmazonPhotoAssignee")
+  etsyAssignedPhotos   EtsyListing[]    @relation("EtsyPhotoAssignee")
+  sellingAccounts      SellingAccount[] @relation("AccountCreatedBy")
   notifications   Notification[]
   auditLogs       AuditLog[]
   ordersDesigned  Order[]          @relation("OrderDesigner")
@@ -44,7 +46,6 @@ model User {
 // ============================
 model Idea {
   id                String   @id @default(cuid())
-  sku               String
   msku              String   @unique
   autoGenerateMsku  Boolean  @default(true) @map("auto_generate_msku")
   createdById       String   @map("created_by")
@@ -53,12 +54,11 @@ model Idea {
   prompt            String
   sourceLinks       String   @default("[]") @map("source_links") // JSON array of strings
   mainImageUrl      String   @map("main_image_url")
-  status            String   @default("reviewing") // reviewing | approved | published
-  photoStatus       String   @default("not_requested") @map("photo_status") // not_requested | awaiting_photos | pending_approval | revision_requested | approved
-  photoAssigneeId   String?  @map("photo_assignee_id")
-  photoRevisionNote String?  @map("photo_revision_note")
-  fileStatus        String   @default("not_started") @map("file_status") // not_started | in_progress | pending_review | approved | revision_requested
-  fulfillmentType   String   @default("FBM") @map("fulfillment_type") // FBA | FBM
+  status            String   @default("reviewing") // reviewing | revision_requested | approved | rejected
+  fileStatus        String   @default("not_requested") @map("file_status") // not_requested | awaiting_file | pending_approval | revision_requested | approved
+  fileAssigneeId    String?  @map("file_assignee_id")
+  fileRevisionNote  String?  @map("file_revision_note")
+  fileAssignee      User?    @relation("FileAssignee", fields: [fileAssigneeId], references: [id])
   productionFileUrl String?  @map("production_file_url")
   // Amazon/Etsy content - filled at idea creation
   title             String?
@@ -80,7 +80,6 @@ model Idea {
 
   // Relations
   createdBy          User                @relation("CreatedBy", fields: [createdById], references: [id])
-  photoAssignee      User?               @relation("PhotoAssignee", fields: [photoAssigneeId], references: [id])
   topic              ProductTopic        @relation(fields: [topicId], references: [id])
   aiModel            AiModel             @relation(fields: [aiModelId], references: [id])
   amazonListing      AmazonListing?
@@ -99,6 +98,7 @@ model AmazonListing {
   id                  String   @id @default(cuid())
   ideaId              String   @unique @map("idea_id")
   sellingAccountId    String?  @map("selling_account_id")
+  sku                 String?
   asin                String?
   fnskuCode           String?  @map("fnsku_code")
   fnskuLabelFileUrl   String?  @map("fnsku_label_file_url")
@@ -115,9 +115,14 @@ model AmazonListing {
   contentAPlusUrl     String?  @map("content_a_plus_url")
   listingStatus       String   @default("ready") @map("listing_status") // ready | uploading | uploaded | selling | error | fixed | delisted
   listingStatusReason String?  @map("listing_status_reason") // Reason for error/delisted
+  fulfillmentType     String   @default("FBA") @map("fulfillment_type") // FBA | FBM
+  campAuto            Boolean  @default(false) @map("camp_auto")
   vineStatus          String   @default("not_enrolled") @map("vine_status") // not_enrolled | enrolled | reviewing | completed
   vineReviewUrl       String?  @map("vine_review_url")
   photosUploaded      Boolean  @default(false) @map("photos_uploaded") // Đã up ảnh thật (không phải ảnh tạm)
+  photoStatus         String   @default("not_requested") @map("photo_status") // not_requested | awaiting_photos | pending_approval | revision_requested | approved
+  photoAssigneeId     String?  @map("photo_assignee_id")
+  photoRevisionNote   String?  @map("photo_revision_note")
   version             Int      @default(1)
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
@@ -125,6 +130,7 @@ model AmazonListing {
   // Relations
   idea           Idea            @relation(fields: [ideaId], references: [id], onDelete: Cascade)
   sellingAccount SellingAccount? @relation(fields: [sellingAccountId], references: [id])
+  photoAssignee  User?           @relation("AmazonPhotoAssignee", fields: [photoAssigneeId], references: [id])
 
   @@map("amazon_listings")
 }
@@ -148,6 +154,9 @@ model EtsyListing {
   useAmazonVideo      Boolean  @default(false) @map("use_amazon_video")
   listingStatus       String   @default("ready") @map("listing_status") // ready | uploaded | selling | error | fixed | delisted
   listingStatusReason String?  @map("listing_status_reason") // Reason for error/delisted
+  photoStatus         String   @default("not_requested") @map("photo_status") // not_requested | awaiting_photos | pending_approval | revision_requested | approved
+  photoAssigneeId     String?  @map("photo_assignee_id")
+  photoRevisionNote   String?  @map("photo_revision_note")
   version             Int      @default(1)
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
@@ -155,6 +164,7 @@ model EtsyListing {
   // Relations
   idea           Idea            @relation(fields: [ideaId], references: [id], onDelete: Cascade)
   sellingAccount SellingAccount? @relation(fields: [sellingAccountId], references: [id])
+  photoAssignee  User?           @relation("EtsyPhotoAssignee", fields: [photoAssigneeId], references: [id])
 
   @@map("etsy_listings")
 }

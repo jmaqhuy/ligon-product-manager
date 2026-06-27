@@ -55,7 +55,7 @@ export async function POST(
           productionRequestId: item.productionRequestId || null,
         },
         include: {
-          idea: { select: { id: true, msku: true, sku: true, title: true } },
+          idea: { select: { id: true, msku: true, amazonListing: { select: { sku: true } } } },
           productionRequest: { select: { id: true, completedAt: true } },
         },
       });

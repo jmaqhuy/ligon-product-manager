@@ -61,6 +61,8 @@ export default function CreateIdeaPage() {
   const [tags, setTags] = useState("");
   const [slugs, setSlugs] = useState("");
 
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
   const [widthCm, setWidthCm] = useState("");
   const [heightCm, setHeightCm] = useState("");
   const [thicknessMm, setThicknessMm] = useState("");
@@ -110,6 +112,7 @@ export default function CreateIdeaPage() {
             
             // Automatically switch to partner if copying (common workflow)
             setIdeaSource("partner");
+            setShowAdvanced(true);
             toast.info("Đã tải kích thước từ ý tưởng gốc");
           }
         })
@@ -279,24 +282,27 @@ export default function CreateIdeaPage() {
                     </Select>
                   </div>
                 </div>
-                <div className="grid grid-cols-4 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Rộng (cm)</Label>
-                    <Input value={widthCm} onChange={e => setWidthCm(e.target.value)} placeholder="20" className="h-9 text-sm" />
+
+                {showAdvanced && (
+                  <div className="grid grid-cols-4 gap-3 pt-2 border-t mt-4">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Rộng (cm)</Label>
+                      <Input value={widthCm} onChange={e => setWidthCm(e.target.value)} placeholder="20" className="h-9 text-sm" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Cao (cm)</Label>
+                      <Input value={heightCm} onChange={e => setHeightCm(e.target.value)} placeholder="25" className="h-9 text-sm" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Dày (mm)</Label>
+                      <Input value={thicknessMm} onChange={e => setThicknessMm(e.target.value)} placeholder="3" className="h-9 text-sm" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Vật liệu</Label>
+                      <Input value={material} onChange={e => setMaterial(e.target.value)} placeholder="VD: Gỗ" className="h-9 text-sm" />
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Cao (cm)</Label>
-                    <Input value={heightCm} onChange={e => setHeightCm(e.target.value)} placeholder="25" className="h-9 text-sm" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Dày (mm)</Label>
-                    <Input value={thicknessMm} onChange={e => setThicknessMm(e.target.value)} placeholder="3" className="h-9 text-sm" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Vật liệu</Label>
-                    <Input value={material} onChange={e => setMaterial(e.target.value)} placeholder="VD: Gỗ" className="h-9 text-sm" />
-                  </div>
-                </div>
+                )}
               </CardContent>
             </Card>
 
@@ -325,8 +331,8 @@ export default function CreateIdeaPage() {
               </CardContent>
             </Card>
 
-            {/* Content fields (Ẩn nếu là đối tác) */}
-            {ideaSource !== "partner" && (
+            {/* Content fields (Ẩn nếu là đối tác hoặc chưa mở nâng cao) */}
+            {ideaSource !== "partner" && showAdvanced && (
               <Card>
                 <CardHeader><CardTitle className="text-base">Nội dung sản phẩm (Dành cho Amazon/Etsy)</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
@@ -354,6 +360,12 @@ export default function CreateIdeaPage() {
                   </div>
                 </CardContent>
               </Card>
+            )}
+
+            {!showAdvanced && (
+              <Button type="button" variant="outline" className="w-full text-muted-foreground border-dashed" onClick={() => setShowAdvanced(true)}>
+                Hiển thị các trường nâng cao (Kích thước, SEO)
+              </Button>
             )}
           </div>
 

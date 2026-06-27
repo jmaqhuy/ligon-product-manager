@@ -23,7 +23,7 @@ export async function GET(
         createdBy: {
           select: { id: true, fullName: true, nameAbbreviation: true, role: true },
         },
-        photoAssignee: {
+        fileAssignee: {
           select: { id: true, fullName: true, nameAbbreviation: true },
         },
         topic: { select: { id: true, name: true } },
@@ -94,13 +94,20 @@ export async function PATCH(
     const updateData: any = { version: { increment: 1 } };
     const auditEntries: { field: string; oldVal: string | null; newVal: string | null }[] = [];
 
-    // Status change (approve/reject)
+    // Status change (approve/reject/revise)
     if (body.status !== undefined && body.status !== idea.status) {
-      if ((body.status === "approved" || body.status === "rejected") && !can(currentRole, "approve_idea")) {
+      if ((body.status === "approved" || body.status === "rejected" || body.status === "revision_requested") && !can(currentRole, "approve_idea")) {
         return NextResponse.json({ error: "Bạn không có quyền duyệt/từ chối ý tưởng" }, { status: 403 });
       }
       auditEntries.push({ field: "status", oldVal: idea.status, newVal: body.status });
       updateData.status = body.status;
+      
+      if (body.fulfillmentType) {
+        await db.amazonListing.update({
+          where: { ideaId: id },
+          data: { fulfillmentType: body.fulfillmentType }
+        });
+      }
       
       // If approved or rejected, typically needsReReview is cleared
       if (body.status === "approved" || body.status === "rejected") {
@@ -118,36 +125,16 @@ export async function PATCH(
       updateData.needsReReview = body.needsReReview;
     }
 
-    // Photo status
-    if (body.photoStatus !== undefined && body.photoStatus !== idea.photoStatus) {
-      auditEntries.push({ field: "photoStatus", oldVal: idea.photoStatus, newVal: body.photoStatus });
-      updateData.photoStatus = body.photoStatus;
-    }
-
-    // Photo assignee
-    if (body.photoAssigneeId !== undefined) {
-      auditEntries.push({ field: "photoAssigneeId", oldVal: idea.photoAssigneeId, newVal: body.photoAssigneeId });
-      updateData.photoAssigneeId = body.photoAssigneeId;
-    }
-
-    // Photo revision note
-    if (body.photoRevisionNote !== undefined) {
-      updateData.photoRevisionNote = body.photoRevisionNote;
-    }
-
-    // File status
+    // File status & assignee
     if (body.fileStatus !== undefined && body.fileStatus !== idea.fileStatus) {
       auditEntries.push({ field: "fileStatus", oldVal: idea.fileStatus, newVal: body.fileStatus });
       updateData.fileStatus = body.fileStatus;
     }
-
-    // Fulfillment type
-    if (body.fulfillmentType !== undefined && body.fulfillmentType !== idea.fulfillmentType) {
-      if (!can(currentRole, "change_fulfillment_type")) {
-        return NextResponse.json({ error: "Bạn không có quyền đổi loại fulfillment" }, { status: 403 });
-      }
-      auditEntries.push({ field: "fulfillmentType", oldVal: idea.fulfillmentType, newVal: body.fulfillmentType });
-      updateData.fulfillmentType = body.fulfillmentType;
+    if (body.fileAssigneeId !== undefined) {
+      updateData.fileAssigneeId = body.fileAssigneeId;
+    }
+    if (body.fileRevisionNote !== undefined) {
+      updateData.fileRevisionNote = body.fileRevisionNote;
     }
 
     // Production file URL
@@ -157,6 +144,13 @@ export async function PATCH(
     if (body.partnerLabel !== undefined) {
       updateData.partnerLabel = body.partnerLabel;
     }
+    if (body.fulfillmentType !== undefined && !body.status) {
+      // If updating fulfillmentType independently of status change
+      await db.amazonListing.update({
+        where: { ideaId: id },
+        data: { fulfillmentType: body.fulfillmentType }
+      });
+    }
 
     // Dimensions & material
     if (body.widthCm !== undefined) { updateData.widthCm = body.widthCm; }
@@ -164,19 +158,29 @@ export async function PATCH(
     if (body.thicknessMm !== undefined) { updateData.thicknessMm = body.thicknessMm; }
     if (body.material !== undefined) { updateData.material = body.material; }
 
-    // Title / Description and core fields
+    // Photo status
+    if (body.photoStatus !== undefined) {
+      await db.amazonListing.update({ where: { ideaId: id }, data: { photoStatus: body.photoStatus } });
+      await db.etsyListing.update({ where: { ideaId: id }, data: { photoStatus: body.photoStatus } });
+    }
+
+    // Core fields
     let coreEdited = false;
-    if (body.title !== undefined) { updateData.title = body.title; coreEdited = true; }
-    if (body.description !== undefined) { updateData.description = body.description; coreEdited = true; }
     if (body.sourceLinks !== undefined) { updateData.sourceLinks = body.sourceLinks; coreEdited = true; }
     if (body.prompt !== undefined) { updateData.prompt = body.prompt; coreEdited = true; }
     if (body.topicId !== undefined) { updateData.topicId = body.topicId; coreEdited = true; }
     if (body.aiModelId !== undefined) { updateData.aiModelId = body.aiModelId; coreEdited = true; }
     if (body.mainImageUrl !== undefined) { updateData.mainImageUrl = body.mainImageUrl; coreEdited = true; }
 
-    // If employee edits a non-reviewing idea, flag it for re-review
-    if (currentRole === "employee" && coreEdited && idea.status !== "reviewing") {
-      updateData.needsReReview = true;
+    // If employee edits a non-reviewing idea, flag it for re-review or resubmit
+    if (currentRole === "employee" && coreEdited) {
+      if (idea.status === "revision_requested") {
+        updateData.status = "reviewing";
+        updateData.needsReReview = false;
+        auditEntries.push({ field: "status", oldVal: "revision_requested", newVal: "reviewing" });
+      } else if (idea.status !== "reviewing") {
+        updateData.needsReReview = true;
+      }
     }
 
     const updated = await db.idea.update({
@@ -209,7 +213,7 @@ export async function PATCH(
       } else if (body.status === "rejected") {
         type = "idea_rejected";
         message = `Ý tưởng ${idea.msku} của bạn bị từ chối. Lý do: ${body.reviewComment || "Không có"}`;
-      } else if (body.status === "reviewing") {
+      } else if (body.status === "revision_requested") {
         type = "idea_revision_requested";
         message = `Ý tưởng ${idea.msku} của bạn cần được chỉnh sửa. Lý do: ${body.reviewComment || "Không có"}`;
       }
@@ -232,80 +236,8 @@ export async function PATCH(
       }
     }
 
-    // 2. Notify creator if photo status changed to "awaiting_photos"
-    if (body.photoStatus === "awaiting_photos" && idea.photoStatus !== "awaiting_photos" && session.user.id !== idea.createdById) {
-      await db.notification.create({
-        data: {
-          userId: idea.createdById,
-          type: "photo_requested",
-          category: "photo",
-          message: `Sếp/Quản lý đã yêu cầu làm ảnh cho ý tưởng ${idea.msku}.`,
-          actionUrl: `/ideas/${idea.id}`
-        }
-      });
-      broadcastNotification([idea.createdById], {
-        type: "photo_requested",
-        message: `Sếp/Quản lý đã yêu cầu làm ảnh cho ý tưởng ${idea.msku}.`,
-        actionUrl: `/ideas/${idea.id}`
-      });
-    }
-
-    // 2b. Notify assigned employee when photo task is assigned
-    if (body.photoAssigneeId && body.photoAssigneeId !== idea.photoAssigneeId && body.photoAssigneeId !== session.user.id) {
-      await db.notification.create({
-        data: {
-          userId: body.photoAssigneeId,
-          type: "photo_assigned",
-          category: "photo",
-          message: `Bạn được giao làm ảnh cho ý tưởng ${idea.msku}.`,
-          actionUrl: `/ideas/${idea.id}`
-        }
-      });
-      broadcastNotification([body.photoAssigneeId], {
-        type: "photo_assigned",
-        message: `Bạn được giao làm ảnh cho ý tưởng ${idea.msku}.`,
-        actionUrl: `/ideas/${idea.id}`
-      });
-    }
-
-    // 2c. Notify employee when photos are approved
-    if (body.photoStatus === "approved" && idea.photoStatus !== "approved" && idea.photoAssigneeId) {
-      await db.notification.create({
-        data: {
-          userId: idea.photoAssigneeId,
-          type: "photo_approved",
-          category: "photo",
-          message: `Ảnh của ý tưởng ${idea.msku} đã được duyệt! Sẵn sàng đăng bán.`,
-          actionUrl: `/ideas/${idea.id}`
-        }
-      });
-      broadcastNotification([idea.photoAssigneeId], {
-        type: "photo_approved",
-        message: `Ảnh của ý tưởng ${idea.msku} đã được duyệt!`,
-        actionUrl: `/ideas/${idea.id}`
-      });
-    }
-
-    // 2d. Notify employee when photos need revision
-    if (body.photoStatus === "revision_requested" && idea.photoStatus !== "revision_requested" && idea.photoAssigneeId) {
-      await db.notification.create({
-        data: {
-          userId: idea.photoAssigneeId,
-          type: "photo_revision_requested",
-          category: "photo",
-          message: `Ảnh của ý tưởng ${idea.msku} cần được chỉnh sửa. Lý do: ${body.photoRevisionNote || "Không có"}`,
-          actionUrl: `/ideas/${idea.id}`
-        }
-      });
-      broadcastNotification([idea.photoAssigneeId], {
-        type: "photo_revision_requested",
-        message: `Ảnh của ý tưởng ${idea.msku} cần được chỉnh sửa.`,
-        actionUrl: `/ideas/${idea.id}`
-      });
-    }
-
     // 3. Notify bosses/managers if employee updates idea and needs re-review
-    if (updateData.needsReReview) {
+    if (updateData.needsReReview || (updateData.status === "reviewing" && idea.status === "revision_requested")) {
       const managersAndBosses = await db.user.findMany({
         where: { role: { in: ["manager", "boss"] }, status: "active" }
       });
@@ -363,7 +295,8 @@ export async function DELETE(
     
     // Global check: cannot delete if already in production
     const inProduction = 
-      idea.status === "published" || 
+      idea.amazonListing?.listingStatus === "published" ||
+      idea.etsyListing?.listingStatus === "published" ||
       idea.fileStatus === "approved" || 
       !!idea.productionFileUrl || 
       idea.productionRequests.length > 0;

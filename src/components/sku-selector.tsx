@@ -14,7 +14,7 @@ import { convertToDirectImageUrl } from "@/lib/google-drive";
 export interface AvailableIdea {
   id: string;
   msku: string;
-  sku: string;
+  sku: string | null;
   title: string | null;
   mainImageUrl: string;
   fulfillmentType: string;

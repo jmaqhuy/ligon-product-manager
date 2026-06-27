@@ -1,7 +1,7 @@
 import type { Role } from "@/lib/permissions";
 
 // Idea statuses
-export const IDEA_STATUSES = ["reviewing", "approved", "published", "rejected"] as const;
+export const IDEA_STATUSES = ["reviewing", "revision_requested", "approved", "rejected"] as const;
 export type IdeaStatus = (typeof IDEA_STATUSES)[number];
 
 export const IDEA_TABS = ["all", "reviewing", "photos", "ready", "published", "rejected"] as const;
@@ -17,11 +17,11 @@ export const PHOTO_STATUSES = [
 export type PhotoStatus = (typeof PHOTO_STATUSES)[number];
 
 export const FILE_STATUSES = [
-  "not_started",
-  "in_progress",
-  "pending_review",
-  "approved",
+  "not_requested",
+  "awaiting_file",
+  "pending_approval",
   "revision_requested",
+  "approved",
 ] as const;
 export type FileStatus = (typeof FILE_STATUSES)[number];
 
@@ -29,10 +29,10 @@ export const FULFILLMENT_TYPES = ["FBA", "FBM"] as const;
 export type FulfillmentType = (typeof FULFILLMENT_TYPES)[number];
 
 export const LISTING_STATUSES = [
+  "not_ready",
   "ready",
   "uploading",
-  "uploaded",
-  "selling",
+  "published",
   "error",
   "fixed",
   "delisted",
@@ -76,8 +76,8 @@ export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
 // Status label mappings (Vietnamese)
 export const ideaStatusLabels: Record<IdeaStatus, string> = {
   reviewing: "Đang xem xét",
+  revision_requested: "Yêu cầu chỉnh sửa",
   approved: "Đã được duyệt",
-  published: "Đã đăng bán",
   rejected: "Đã bị từ chối",
 };
 
@@ -90,18 +90,18 @@ export const photoStatusLabels: Record<PhotoStatus, string> = {
 };
 
 export const fileStatusLabels: Record<FileStatus, string> = {
-  not_started: "Chưa bắt đầu",
-  in_progress: "Đang làm",
-  pending_review: "Chờ duyệt file",
+  not_requested: "Chưa yêu cầu",
+  awaiting_file: "Đang chờ làm file",
+  pending_approval: "Chờ duyệt file",
+  revision_requested: "Yêu cầu làm lại",
   approved: "Đã duyệt file",
-  revision_requested: "Yêu cầu chỉnh sửa",
 };
 
 export const listingStatusLabels: Record<ListingStatus, string> = {
-  ready: "Chưa sẵn sàng",
+  not_ready: "Chưa sẵn sàng",
+  ready: "Sẵn sàng",
   uploading: "Đang up",
-  uploaded: "Đã lên",
-  selling: "Đang bán",
+  published: "Đã đăng bán",
   error: "Lỗi",
   fixed: "Đã sửa",
   delisted: "Bị sàn gỡ",

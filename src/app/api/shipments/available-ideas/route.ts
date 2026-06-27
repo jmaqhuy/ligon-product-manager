@@ -17,20 +17,22 @@ export async function GET(req: NextRequest) {
     // Build where: ideas that are published and have FBA fulfillment
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const where: any = {
-      status: "published",
-      fulfillmentType: "FBA",
+      amazonListing: {
+        listingStatus: "published",
+        fulfillmentType: "FBA",
+      }
     };
 
     if (search) {
       where.OR = [
         { msku: { contains: search } },
-        { sku: { contains: search } },
-        { title: { contains: search } },
+        { amazonListing: { sku: { contains: search } } },
+        { amazonListing: { itemName: { contains: search } } },
       ];
     }
 
     if (amazonAccountId) {
-      where.amazonListing = { sellingAccountId: amazonAccountId };
+      where.amazonListing.sellingAccountId = amazonAccountId;
     }
 
     // Fetch ideas with their Amazon listing, production, and shipment info
@@ -39,16 +41,16 @@ export async function GET(req: NextRequest) {
       select: {
         id: true,
         msku: true,
-        sku: true,
-        title: true,
         mainImageUrl: true,
-        fulfillmentType: true,
         topic: { select: { name: true } },
         amazonListing: {
           select: {
             id: true,
             asin: true,
+            sku: true,
             fnskuCode: true,
+            itemName: true,
+            fulfillmentType: true,
             sellingAccount: { select: { id: true, name: true } },
           },
         },
@@ -99,10 +101,7 @@ export async function GET(req: NextRequest) {
         }
 
         // Total produced (not shipped) quantity
-        const availableQty = completedProduction.reduce(
-          (sum, pr) => sum + (pr.actualQty || pr.requestedQty),
-          0
-        );
+        const availableQty = Math.max(0, (idea.productionRequests?.reduce((sum: number, pr: any) => sum + pr.requestedQty, 0) || 0) - (idea.shipmentItems?.reduce((sum: number, si: any) => sum + si.totalQty, 0) || 0));
 
         const hasShippedProduction = shippedProduction.length > 0;
         const totalShippedQty = shippedProduction.reduce(
@@ -119,10 +118,10 @@ export async function GET(req: NextRequest) {
         return {
           id: idea.id,
           msku: idea.msku,
-          sku: idea.sku,
-          title: idea.title,
+          sku: idea.amazonListing?.sku || null,
+          title: idea.amazonListing?.itemName || idea.amazonListing?.sku || idea.msku,
           mainImageUrl: idea.mainImageUrl,
-          fulfillmentType: idea.fulfillmentType,
+          fulfillmentType: idea.amazonListing?.fulfillmentType || "FBA",
           topicName: idea.topic.name,
           asin: idea.amazonListing?.asin || null,
           fnskuCode: idea.amazonListing?.fnskuCode || null,

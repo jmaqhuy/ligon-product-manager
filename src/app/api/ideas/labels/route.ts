@@ -21,9 +21,9 @@ export async function POST(req: NextRequest) {
       where: {
         OR: skus.map((sku: string) => ({
           OR: [
-            { sku: { equals: sku } },
+            { amazonListing: { sku: { equals: sku } } },
             { msku: { equals: sku } },
-            { sku: { contains: sku } },
+            { amazonListing: { sku: { contains: sku } } },
             { msku: { contains: sku } },
           ],
         })),
@@ -35,6 +35,9 @@ export async function POST(req: NextRequest) {
             fnskuCode: true,
             fnskuLabelFileUrl: true,
             asin: true,
+            sku: true,
+            itemName: true,
+            fulfillmentType: true,
           },
         },
         createdBy: {
@@ -62,9 +65,9 @@ export async function POST(req: NextRequest) {
     const results = ideas.map((idea) => ({
       id: idea.id,
       msku: idea.msku,
-      sku: idea.sku,
-      title: idea.title,
-      fulfillmentType: idea.fulfillmentType,
+      sku: idea.amazonListing?.sku || null,
+      title: idea.amazonListing?.itemName || idea.amazonListing?.sku || idea.msku,
+      fulfillmentType: idea.amazonListing?.fulfillmentType || "FBA",
       createdBy: idea.createdBy.fullName,
       fnskuCode: idea.amazonListing?.fnskuCode || null,
       fnskuLabelFileUrl: idea.amazonListing?.fnskuLabelFileUrl || null,

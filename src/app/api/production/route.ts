@@ -34,8 +34,8 @@ export async function GET(req: NextRequest) {
     if (search) {
       where.idea = {
         OR: [
-          { sku: { contains: search } },
           { msku: { contains: search } },
+          { amazonListing: { sku: { contains: search } } },
         ],
       };
     }
@@ -47,10 +47,8 @@ export async function GET(req: NextRequest) {
           select: {
             id: true,
             msku: true,
-            sku: true,
+            amazonListing: { select: { sku: true, fulfillmentType: true, itemName: true } },
             mainImageUrl: true,
-            title: true,
-            fulfillmentType: true,
             productionFileUrl: true,
           },
         },

@@ -17,7 +17,7 @@ export async function GET() {
         msku: true,
         sourceLinks: true,
         status: true,
-        title: true,
+        amazonListing: { select: { itemName: true, sku: true } },
       },
     });
 
@@ -57,7 +57,7 @@ export async function GET() {
           linkMap[baseUrl].ideas.push({
             id: idea.id,
             msku: idea.msku,
-            title: idea.title,
+            title: idea.amazonListing?.itemName || idea.amazonListing?.sku || idea.msku,
             status: idea.status,
           });
         }

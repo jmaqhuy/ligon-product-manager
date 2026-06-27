@@ -21,7 +21,7 @@ export async function GET(
         amazonAccount: { select: { id: true, name: true, platform: true } },
         items: {
           include: {
-            idea: { select: { id: true, msku: true, sku: true, title: true, mainImageUrl: true, fulfillmentType: true, amazonListing: { select: { asin: true, fnskuCode: true, fnskuLabelFileUrl: true } } } },
+            idea: { select: { id: true, msku: true, mainImageUrl: true, amazonListing: { select: { sku: true, asin: true, fnskuCode: true, fnskuLabelFileUrl: true } } } },
             productionRequest: { select: { id: true, completedAt: true, requestedQty: true } },
             boxItems: {
               include: {
@@ -34,7 +34,7 @@ export async function GET(
           include: {
             items: {
               include: {
-                shipmentItem: { select: { id: true, totalQty: true, idea: { select: { msku: true, sku: true, mainImageUrl: true, amazonListing: { select: { asin: true, fnskuCode: true } } } } } },
+                shipmentItem: { select: { id: true, totalQty: true, idea: { select: { msku: true, mainImageUrl: true, amazonListing: { select: { sku: true, asin: true, fnskuCode: true } } } } } },
               },
             },
           },
@@ -103,14 +103,14 @@ export async function PATCH(
         amazonAccount: { select: { id: true, name: true } },
         items: {
           include: {
-            idea: { select: { id: true, msku: true, sku: true, amazonListing: { select: { asin: true, fnskuCode: true, fnskuLabelFileUrl: true } } } },
+            idea: { select: { id: true, msku: true, amazonListing: { select: { sku: true, asin: true, fnskuCode: true, fnskuLabelFileUrl: true } } } },
           },
         },
         boxes: {
           include: {
             items: {
               include: {
-                shipmentItem: { select: { id: true, totalQty: true, idea: { select: { msku: true, sku: true, mainImageUrl: true, amazonListing: { select: { asin: true, fnskuCode: true } } } } } },
+                shipmentItem: { select: { id: true, totalQty: true, idea: { select: { msku: true, mainImageUrl: true, amazonListing: { select: { sku: true, asin: true, fnskuCode: true } } } } } },
               },
             },
           },

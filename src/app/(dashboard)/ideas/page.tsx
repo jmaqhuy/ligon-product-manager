@@ -39,6 +39,7 @@ import {
   Printer,
   ExternalLink,
   Trash2,
+  MessageSquareWarning,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -58,8 +59,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CopyButton } from "@/components/copy-button";
-import { MonthPicker } from "@/components/month-picker";
+
 import {
   Pagination,
   PaginationContent,
@@ -79,17 +81,38 @@ import type { Role } from "@/lib/permissions";
 import { convertToDirectImageUrl } from "@/lib/google-drive";
 import { apiFetch } from "@/lib/api-client";
 import { ExcelUpload } from "@/components/excel-upload";
+import { FilterPopover } from "./components/filter-popover";
 
 // Status badge colors
-function getStatusBadge(status: IdeaStatus) {
-  const variants: Record<IdeaStatus, { className: string; label: string }> = {
+function getStatusBadge(idea: any) {
+  const status = idea.status;
+  const variants: Record<string, { className: string; label: string }> = {
     reviewing: { className: "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300", label: ideaStatusLabels.reviewing },
     approved: { className: "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300", label: ideaStatusLabels.approved },
-    published: { className: "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300", label: ideaStatusLabels.published },
+    revision_requested: { className: "bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300", label: ideaStatusLabels.revision_requested },
     rejected: { className: "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300", label: ideaStatusLabels.rejected },
   };
   const v = variants[status] || { className: "bg-gray-100 text-gray-800", label: status };
-  return <Badge variant="outline" className={v.className}>{v.label}</Badge>;
+  const badge = <Badge variant="outline" className={v.className}>{v.label}</Badge>;
+
+  if (idea.reviewComment && idea.status !== "approved") {
+    return (
+      <TooltipProvider>
+        <Tooltip delayDuration={100}>
+          <TooltipTrigger asChild>
+            <span className="cursor-help">{badge}</span>
+          </TooltipTrigger>
+          <TooltipContent className={`p-3 max-w-xs border shadow-md ${idea.status === "rejected" ? "border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-900" : "border-orange-200 bg-orange-50 dark:bg-orange-950 dark:border-orange-900"}`}>
+            <div className="flex items-center gap-1.5 mb-1">
+              <MessageSquareWarning className={`h-3 w-3 ${idea.status === "rejected" ? "text-red-600" : "text-orange-600"}`} />
+            </div>
+            <p className={`text-xs whitespace-pre-wrap ${idea.status === "rejected" ? "text-red-800 dark:text-red-300" : "text-orange-800 dark:text-orange-300"}`}>{idea.reviewComment}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+  return badge;
 }
 
 function getPhotoStatusBadge(status: PhotoStatus) {
@@ -217,28 +240,30 @@ function IdeaTable({ ideas, loading, selectedIds, onSelectionChange, canSelect }
                 )}
                 <TableCell>
                   {thumbUrl ? (
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <div
-                          className="w-10 h-10 rounded border border-dashed border-muted-foreground/30 overflow-hidden bg-muted flex items-center justify-center cursor-pointer group/img"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={thumbUrl}
-                            alt={idea.msku}
-                            className="w-full h-full object-cover transition-transform duration-300 group-hover/img:scale-125"
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                          />
-                        </div>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-[95vw] w-fit bg-transparent border-none shadow-none" showCloseButton={false} onClick={(e) => e.stopPropagation()}>
-                        <div className="relative flex justify-center items-center p-0">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={thumbUrl} alt="Full view" className="max-h-[95vh] max-w-[95vw] w-auto h-auto rounded-md object-contain" />
-                        </div>
-                      </DialogContent>
-                    </Dialog>
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <div
+                            className="w-10 h-10 rounded border border-dashed border-muted-foreground/30 overflow-hidden bg-muted flex items-center justify-center cursor-pointer group/img"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={thumbUrl}
+                              alt={idea.msku}
+                              className="w-full h-full object-cover transition-transform duration-300 group-hover/img:scale-125"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                            />
+                          </div>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-fit bg-transparent border-none shadow-none !ring-0 p-0" showCloseButton={false} onClick={(e) => e.stopPropagation()}>
+                          <div className="relative flex justify-center items-center p-0">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={thumbUrl} alt="Full view" className="max-h-[95vh] max-w-[95vw] w-auto h-auto rounded-md object-contain" />
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
                   ) : (
                     <div className="w-10 h-10 rounded border border-dashed border-muted-foreground/30 overflow-hidden bg-muted flex items-center justify-center">
                       <span className="text-xs text-muted-foreground">N/A</span>
@@ -263,7 +288,7 @@ function IdeaTable({ ideas, loading, selectedIds, onSelectionChange, canSelect }
                 <TableCell>{getFulfillmentBadge(idea.fulfillmentType)}</TableCell>
                 <TableCell>
                   <div className="flex flex-col items-start gap-1">
-                    {getStatusBadge(idea.status)}
+                    {getStatusBadge(idea)}
                     {getSourceBadge(idea.source)}
                     {idea.needsReReview && (
                       <Badge variant="destructive" className="bg-red-500 text-white animate-pulse text-[10px] px-1 py-0 h-4">
@@ -272,7 +297,17 @@ function IdeaTable({ ideas, loading, selectedIds, onSelectionChange, canSelect }
                     )}
                   </div>
                 </TableCell>
-                <TableCell className="hidden md:table-cell">{getPhotoStatusBadge(idea.photoStatus)}</TableCell>
+                <TableCell className="hidden md:table-cell">
+                  <div className="flex flex-col gap-1">
+                    {(idea as any).amazonPhotoStatus && (idea as any).amazonPhotoStatus !== "not_requested" && (
+                      <div className="flex items-center gap-1"><span className="text-[10px] text-muted-foreground w-6">AMZ</span> {getPhotoStatusBadge((idea as any).amazonPhotoStatus)}</div>
+                    )}
+                    {(idea as any).etsyPhotoStatus && (idea as any).etsyPhotoStatus !== "not_requested" && (
+                      <div className="flex items-center gap-1"><span className="text-[10px] text-muted-foreground w-6">Etsy</span> {getPhotoStatusBadge((idea as any).etsyPhotoStatus)}</div>
+                    )}
+                    {(!(idea as any).amazonPhotoStatus || (idea as any).amazonPhotoStatus === "not_requested") && (!(idea as any).etsyPhotoStatus || (idea as any).etsyPhotoStatus === "not_requested") && getPhotoStatusBadge("not_requested")}
+                  </div>
+                </TableCell>
                 <TableCell className="text-sm text-muted-foreground hidden sm:table-cell">
                   {new Date(idea.createdAt).toLocaleDateString("vi-VN")}
                 </TableCell>
@@ -287,22 +322,25 @@ function IdeaTable({ ideas, loading, selectedIds, onSelectionChange, canSelect }
 
 export default function IdeasPage() {
   const { data: session } = useSession();
-  const searchParams = useSearchParams();
   const router = useRouter();
   const role = session?.user?.role as Role | undefined;
   const isEmployee = role === "employee";
   const sessionReady = !!session?.user;
 
-  const urlTab = searchParams.get("tab") || "reviewing";
+  const searchParams = useSearchParams();
+  const ideaStatus = searchParams.get("ideaStatus");
+  const photoStatus = searchParams.get("photoStatus");
+  const amazonStatus = searchParams.get("amazonStatus");
+  const etsyStatus = searchParams.get("etsyStatus");
+  const fulfillmentType = searchParams.get("fulfillmentType");
   const urlMine = searchParams.get("mine");
+  const topicId = searchParams.get("topicId");
+  const month = searchParams.get("month");
+
   const [search, setSearch] = useState("");
-  // Read toggle from URL if present, otherwise default by role
-  const [showMine, setShowMine] = useState(urlMine !== null ? urlMine === "true" : !!isEmployee);
-  const [activeTab, setActiveTab] = useState(urlTab);
   const [ideas, setIdeas] = useState<IdeaRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [topicId, setTopicId] = useState("");
-  const [month, setMonth] = useState("");
+
   const [topics, setTopics] = useState<{ id: string; name: string }[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchProcessing, setBatchProcessing] = useState(false);
@@ -315,7 +353,7 @@ export default function IdeasPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
-  const pageSize = 20;
+  const [pageSize, setPageSize] = useState(20);
   const canSelect = true;
 
   const handleSelectionChange = useCallback((id: string, checked: boolean) => {
@@ -329,12 +367,12 @@ export default function IdeasPage() {
 
   const canDeleteIdea = (idea: { createdById?: string; status: string; fileStatus?: string; productionFileUrl?: string | null; photoStatus?: string }) => {
     // Determine if in production (same as backend logic)
-    const inProduction = idea.status === "published" || idea.fileStatus === "approved" || !!idea.productionFileUrl;
+    const inProduction = idea.fileStatus === "approved" || idea.fileStatus === "approved" || !!idea.productionFileUrl;
     if (inProduction) return false;
 
     if (role === "boss" || role === "manager") return true;
     if (idea.createdById !== session?.user?.id) return false;
-    
+
     if (idea.status === "reviewing") return true;
     if (
       idea.status === "approved" &&
@@ -408,12 +446,12 @@ export default function IdeasPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ skus, quantities: labelQuantities }),
       });
-      
+
       if (error) {
         setLabelDialogOpen(false); // Đóng modal nếu có lỗi để hiện action toast
         return;
       }
-      
+
       if (data) {
         setLabelResults(data);
         const qty: Record<string, number> = {};
@@ -433,33 +471,26 @@ export default function IdeasPage() {
 
   // Fetch topics for filter
   useEffect(() => {
-    fetch("/api/topics").then(r => r.json()).then(setTopics).catch(() => {});
+    fetch("/api/topics").then(r => r.json()).then(setTopics).catch(() => { });
   }, []);
 
-  // Sync URL params when they change (tab + mine toggle)
   useEffect(() => {
-    const newTab = searchParams.get("tab") || "reviewing";
-    if (newTab !== activeTab) {
-      setActiveTab(newTab);
-    }
-    const newMine = searchParams.get("mine");
-    if (newMine !== null) {
-      const shouldShowMine = newMine === "true";
-      if (shouldShowMine !== showMine) {
-        setShowMine(shouldShowMine);
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // We rely on URL parameters exclusively now
   }, [searchParams]);
 
   const fetchIdeas = useCallback(async () => {
     if (!sessionReady) return;
     setLoading(true);
     try {
-      const params = new URLSearchParams({ tab: activeTab, page: String(page), pageSize: String(pageSize) });
+      const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
       if (search) params.set("search", search);
-      // Employee defaults to mine=true, but can toggle off to see all
-      const effectiveMine = showMine;
+      if (ideaStatus) params.set("ideaStatus", ideaStatus);
+      if (photoStatus) params.set("photoStatus", photoStatus);
+      if (amazonStatus) params.set("amazonStatus", amazonStatus);
+      if (etsyStatus) params.set("etsyStatus", etsyStatus);
+      if (fulfillmentType) params.set("fulfillmentType", fulfillmentType);
+
+      const effectiveMine = urlMine !== null ? urlMine === "true" : isEmployee;
       if (effectiveMine) params.set("mine", "true");
       if (topicId && topicId !== "all") params.set("topicId", topicId);
       if (month) params.set("month", month);
@@ -471,21 +502,14 @@ export default function IdeasPage() {
         setTotal(json.total || (json.data || json).length);
         setTotalPages(json.totalPages || 1);
       } else {
-        const err = await res.json().catch(() => ({}));
-        // Invalid tab → silently redirect to default, no toast
-        if (res.status === 400 && err.error?.includes("Invalid tab")) {
-          setActiveTab("reviewing");
-          const params = new URLSearchParams(searchParams.toString());
-          params.set("tab", "reviewing");
-          router.replace(`/ideas?${params.toString()}`, { scroll: false });
-        }
+        // Ignored. Filter validation errors should just show empty lists.
       }
     } catch {
       console.error("Failed to fetch ideas");
     } finally {
       setLoading(false);
     }
-  }, [activeTab, search, showMine, topicId, month, page, pageSize, isEmployee, sessionReady]);
+  }, [ideaStatus, photoStatus, amazonStatus, etsyStatus, fulfillmentType, urlMine, search, topicId, month, page, pageSize, isEmployee, sessionReady]);
 
   useEffect(() => {
     fetchIdeas();
@@ -494,9 +518,6 @@ export default function IdeasPage() {
   // Debounced search
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (search && activeTab !== "all") {
-        setActiveTab("all");
-      }
       setPage(1);
       fetchIdeas();
     }, 300);
@@ -537,37 +558,7 @@ export default function IdeasPage() {
           />
         </div>
 
-        <Select value={topicId} onValueChange={(v) => { setTopicId(v); setPage(1); }}>
-          <SelectTrigger className="w-[150px] h-9 text-xs">
-            <SelectValue placeholder="Chủ đề" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tất cả chủ đề</SelectItem>
-            {topics.map((t: { id: string; name: string }) => (
-              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <MonthPicker value={month} onChange={(v) => { setMonth(v); setPage(1); }} />
-
-        <div className="flex items-center gap-2 ml-auto">
-          <Switch
-            id="show-mine"
-            checked={showMine}
-            onCheckedChange={(v) => {
-              setShowMine(v);
-              setPage(1);
-              const params = new URLSearchParams(searchParams.toString());
-              if (v) params.set("mine", "true");
-              else params.set("mine", "false");
-              router.replace(`/ideas?${params.toString()}`, { scroll: false });
-            }}
-          />
-          <Label htmlFor="show-mine" className="text-sm cursor-pointer">
-            Của tôi
-          </Label>
-        </div>
+        <FilterPopover isEmployee={isEmployee} topics={topics} />
       </div>
 
       {/* Batch Action Bar - Floating bottom */}
@@ -576,7 +567,7 @@ export default function IdeasPage() {
           <span className="text-sm font-medium whitespace-nowrap">{selectedIds.size} đã chọn</span>
           <Separator orientation="vertical" className="h-5" />
           <div className="flex items-center gap-1.5">
-            {!isEmployee && activeTab === "reviewing" && (
+            {!isEmployee && ideaStatus === "reviewing" && (
               <Button size="sm" variant="default" onClick={() => handleBatchAction("approve")} disabled={batchProcessing} className="rounded-full">
                 <CheckCheck className="h-4 w-4 mr-1" /> Duyệt
               </Button>
@@ -605,7 +596,7 @@ export default function IdeasPage() {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ skus: selectedIdeas.map(i => i.msku) }),
                   });
-                  
+
                   if (error) {
                     setLabelDialogOpen(false);
                   } else if (data) {
@@ -639,55 +630,9 @@ export default function IdeasPage() {
       )}
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={(tab) => {
-        setActiveTab(tab);
-        setPage(1);
-        setSelectedIds(new Set());
-        const params = new URLSearchParams(searchParams.toString());
-        params.set("tab", tab);
-        router.replace(`/ideas?${params.toString()}`, { scroll: false });
-      }} className="w-full">
-        <TabsList className="flex w-full overflow-x-auto justify-start border-b rounded-none h-auto p-0 bg-transparent">
-          <TabsTrigger value="all" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2">
-            Tất cả
-          </TabsTrigger>
-          <TabsTrigger value="reviewing" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2">
-            Chờ xem xét
-          </TabsTrigger>
-          <TabsTrigger value="photos" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2">
-            Chờ làm ảnh
-          </TabsTrigger>
-          <TabsTrigger value="ready" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2">
-            Sẵn sàng đăng
-          </TabsTrigger>
-          <TabsTrigger value="published" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2">
-            Đã đăng bán
-          </TabsTrigger>
-          <TabsTrigger value="rejected" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2">
-            Đã bị từ chối
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="all" className="mt-4">
-          <IdeaTable ideas={ideas} loading={loading} selectedIds={selectedIds} onSelectionChange={handleSelectionChange} canSelect={canSelect} />
-        </TabsContent>
-
-        <TabsContent value="reviewing" className="mt-4">
-          <IdeaTable ideas={ideas} loading={loading} selectedIds={selectedIds} onSelectionChange={handleSelectionChange} canSelect={canSelect} />
-        </TabsContent>
-        <TabsContent value="photos" className="mt-4">
-          <IdeaTable ideas={ideas} loading={loading} selectedIds={selectedIds} onSelectionChange={handleSelectionChange} canSelect={canSelect} />
-        </TabsContent>
-        <TabsContent value="ready" className="mt-4">
-          <IdeaTable ideas={ideas} loading={loading} selectedIds={selectedIds} onSelectionChange={handleSelectionChange} canSelect={canSelect} />
-        </TabsContent>
-        <TabsContent value="published" className="mt-4">
-          <IdeaTable ideas={ideas} loading={loading} selectedIds={selectedIds} onSelectionChange={handleSelectionChange} canSelect={canSelect} />
-        </TabsContent>
-        <TabsContent value="rejected" className="mt-4">
-          <IdeaTable ideas={ideas} loading={loading} selectedIds={selectedIds} onSelectionChange={handleSelectionChange} canSelect={canSelect} />
-        </TabsContent>
-      </Tabs>
+      <div className="mt-4">
+        <IdeaTable ideas={ideas} loading={loading} selectedIds={selectedIds} onSelectionChange={handleSelectionChange} canSelect={canSelect} />
+      </div>
 
       {/* Pagination */}
       {totalPages > 1 && (
@@ -731,6 +676,19 @@ export default function IdeasPage() {
               </PaginationItem>
             </PaginationContent>
           </Pagination>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Hiển thị</span>
+            <Select value={pageSize.toString()} onValueChange={(v) => { setPageSize(parseInt(v)); setPage(1); }}>
+              <SelectTrigger className="w-[70px] h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="20">20</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+                <SelectItem value="100">100</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       )}
 
@@ -765,49 +723,49 @@ export default function IdeasPage() {
                       {labelResults.map((item) => {
                         const previewUrl = convertToDirectImageUrl(item.fnskuLabelFileUrl || "");
                         return (
-                        <TableRow key={item.id}>
-                          <TableCell>
-                            {previewUrl ? (
-                              <Dialog>
-                                <DialogTrigger asChild>
-                                  <div className="w-14 h-10 rounded border overflow-hidden bg-white cursor-pointer hover:ring-2 hover:ring-primary/50">
+                          <TableRow key={item.id}>
+                            <TableCell>
+                              {previewUrl ? (
+                                <Dialog>
+                                  <DialogTrigger asChild>
+                                    <div className="w-14 h-10 rounded border overflow-hidden bg-white cursor-pointer hover:ring-2 hover:ring-primary/50">
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                                      <img src={previewUrl} alt={item.msku} className="w-full h-full object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                                    </div>
+                                  </DialogTrigger>
+                                  <DialogContent className="max-w-[90vw] sm:max-w-[90vw] max-h-[90vh] bg-transparent border-none shadow-none !ring-0 p-0" showCloseButton={false}>
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img src={previewUrl} alt={item.msku} className="w-full h-full object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                                  </div>
-                                </DialogTrigger>
-                                <DialogContent className="max-w-[90vw] max-h-[90vh] bg-transparent border-none shadow-none p-0" showCloseButton={false}>
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img src={previewUrl} alt={item.msku} className="max-w-[90vw] max-h-[90vh] object-contain rounded-md" />
-                                </DialogContent>
-                              </Dialog>
-                            ) : (
-                              <div className="w-14 h-10 rounded border bg-muted flex items-center justify-center text-[10px] text-muted-foreground">—</div>
-                            )}
-                          </TableCell>
-                          <TableCell className="font-mono text-sm">{item.msku}</TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              min={1}
-                              max={999}
-                              className="w-16 h-8 text-sm text-center"
-                              value={labelQuantities[item.id] || 1}
-                              onChange={(e) => setLabelQuantities({ ...labelQuantities, [item.id]: parseInt(e.target.value) || 1 })}
-                            />
-                          </TableCell>
-                          <TableCell className="font-mono text-xs">{item.fnskuCode || "—"}</TableCell>
-                          <TableCell>
-                            {item.fnskuLabelFileUrl ? (
-                              <Button variant="ghost" size="sm" asChild>
-                                <a href={item.fnskuLabelFileUrl} target="_blank" rel="noopener noreferrer">
-                                  <ExternalLink className="h-4 w-4" />
-                                </a>
-                              </Button>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">Chưa có</span>
-                            )}
-                          </TableCell>
-                        </TableRow>
+                                    <img src={previewUrl} alt={item.msku} className="max-w-[90vw] max-h-[90vh] object-contain rounded-md" />
+                                  </DialogContent>
+                                </Dialog>
+                              ) : (
+                                <div className="w-14 h-10 rounded border bg-muted flex items-center justify-center text-[10px] text-muted-foreground">—</div>
+                              )}
+                            </TableCell>
+                            <TableCell className="font-mono text-sm">{item.msku}</TableCell>
+                            <TableCell>
+                              <Input
+                                type="number"
+                                min={1}
+                                max={999}
+                                className="w-16 h-8 text-sm text-center"
+                                value={labelQuantities[item.id] || 1}
+                                onChange={(e) => setLabelQuantities({ ...labelQuantities, [item.id]: parseInt(e.target.value) || 1 })}
+                              />
+                            </TableCell>
+                            <TableCell className="font-mono text-xs">{item.fnskuCode || "—"}</TableCell>
+                            <TableCell>
+                              {item.fnskuLabelFileUrl ? (
+                                <Button variant="ghost" size="sm" asChild>
+                                  <a href={item.fnskuLabelFileUrl} target="_blank" rel="noopener noreferrer">
+                                    <ExternalLink className="h-4 w-4" />
+                                  </a>
+                                </Button>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">Chưa có</span>
+                              )}
+                            </TableCell>
+                          </TableRow>
                         );
                       })}
                     </TableBody>
