@@ -13,6 +13,10 @@ import {
   Bell,
   ChevronUp,
   Settings,
+  Hash,
+  Bot,
+  Handshake,
+  BookOpen,
 } from "lucide-react";
 import {
   Sidebar,
@@ -20,11 +24,11 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarSeparator,
 } from "@/components/ui/sidebar";
 import {
   DropdownMenu,
@@ -82,18 +86,22 @@ const metadataItems = [
   {
     title: "Chủ đề",
     href: "/metadata/topics",
+    icon: Hash,
   },
   {
     title: "AI Models",
     href: "/metadata/ai-models",
+    icon: Bot,
   },
   {
     title: "Đối tác",
     href: "/metadata/partners",
+    icon: Handshake,
   },
   {
     title: "Quy tắc chung",
     href: "/metadata/rules",
+    icon: BookOpen,
   },
 ];
 
@@ -106,7 +114,7 @@ export function AppSidebar() {
   const initials = user?.nameAbbreviation || "LT";
 
   return (
-    <Sidebar>
+    <Sidebar collapsible="icon">
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
@@ -129,7 +137,6 @@ export function AppSidebar() {
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Menu</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {navItems.map((item) => {
@@ -139,7 +146,7 @@ export function AppSidebar() {
 
                 return (
                   <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton asChild isActive={isActive}>
+                    <SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
                       <Link href={item.href}>
                         <item.icon />
                         <span>{item.title}</span>
@@ -153,33 +160,36 @@ export function AppSidebar() {
         </SidebarGroup>
 
         {user && (user.role === "manager" || user.role === "boss") && (
-          <SidebarGroup>
-            <SidebarGroupLabel>Dữ liệu cấu hình</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {metadataItems.map((item) => {
-                  const isActive = pathname === item.href || pathname.startsWith(item.href);
-                  return (
-                    <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton asChild isActive={isActive}>
-                        <Link href={item.href}>
-                          <span>{item.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+          <>
+            <SidebarSeparator />
+            <SidebarGroup>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {metadataItems.map((item) => {
+                    const isActive = pathname === item.href || pathname.startsWith(item.href);
+                    return (
+                      <SidebarMenuItem key={item.href}>
+                        <SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
+                          <Link href={item.href}>
+                            <item.icon />
+                            <span>{item.title}</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </>
         )}
 
+        <SidebarSeparator />
         <SidebarGroup>
-          <SidebarGroupLabel>Thông báo</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname === "/notifications"}>
+                <SidebarMenuButton asChild isActive={pathname === "/notifications"} tooltip="Thông báo">
                   <Link href="/notifications">
                     <Bell />
                     <span>Thông báo</span>
