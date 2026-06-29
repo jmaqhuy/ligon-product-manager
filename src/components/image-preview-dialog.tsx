@@ -7,7 +7,8 @@ import {
 import { CopyButton } from "@/components/copy-button"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { ExternalLink, ChevronLeft, ChevronRight } from "lucide-react"
+import { ExternalLink, ChevronLeft, ChevronRight, Copy, ArrowLeft, ArrowRight } from "lucide-react"
+import { toast } from "sonner"
 import { isDriveLink, convertToDirectImageUrl, driveToPreviewUrl, driveToThumbnailUrl } from "@/lib/google-drive"
 
 interface ImagePreviewDialogProps {
@@ -71,39 +72,44 @@ export function ImagePreviewDialog({ url, images, initialIndex = 0, children }: 
       <DialogTrigger asChild>
         {children}
       </DialogTrigger>
-      <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-fit bg-transparent border-none shadow-none !ring-0 p-0 flex flex-col items-center justify-center gap-4" showCloseButton={false}>
+      <DialogContent 
+        className="!w-screen !h-screen !max-w-none sm:!max-w-none bg-transparent border-none shadow-none !ring-0 p-0 flex flex-col items-center justify-center gap-4 cursor-zoom-out" 
+        showCloseButton={false}
+        onClick={() => setOpen(false)}
+      >
+        {/* Navigation Arrows (Absolute to full-screen container) */}
+        {galleryImages.length > 1 && currentIndex > 0 && (
+          <button
+            onClick={(e) => { e.stopPropagation(); setCurrentIndex(currentIndex - 1); }}
+            className="absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors z-50"
+          >
+            <ChevronLeft className="h-8 w-8" />
+          </button>
+        )}
+        {galleryImages.length > 1 && currentIndex < galleryImages.length - 1 && (
+          <button
+            onClick={(e) => { e.stopPropagation(); setCurrentIndex(currentIndex + 1); }}
+            className="absolute right-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors z-50"
+          >
+            <ChevronRight className="h-8 w-8" />
+          </button>
+        )}
+
         {/* Main image container */}
-        <div className="relative group/lightbox flex items-center justify-center max-w-full">
+        <div className="relative group/lightbox flex items-center justify-center w-full">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img 
             src={directUrl} 
             alt="Preview" 
-            className="max-h-[80vh] max-w-[95vw] rounded-md object-contain bg-background/20"
+            className="max-h-[80vh] max-w-[calc(100vw-160px)] rounded-md object-contain bg-background/20 cursor-default"
+            onClick={(e) => e.stopPropagation()}
             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
           />
-
-          {/* Navigation Arrows */}
-          {galleryImages.length > 1 && currentIndex > 0 && (
-            <button
-              onClick={() => setCurrentIndex(currentIndex - 1)}
-              className="absolute left-4 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
-            >
-              <ChevronLeft className="h-8 w-8" />
-            </button>
-          )}
-          {galleryImages.length > 1 && currentIndex < galleryImages.length - 1 && (
-            <button
-              onClick={() => setCurrentIndex(currentIndex + 1)}
-              className="absolute right-4 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
-            >
-              <ChevronRight className="h-8 w-8" />
-            </button>
-          )}
         </div>
 
         {/* Thumbnail strip */}
         {galleryImages.length > 1 && (
-          <div className="flex items-center justify-center gap-2 max-w-[95vw] overflow-x-auto p-2 bg-black/50 rounded-lg backdrop-blur-sm">
+          <div className="flex items-center justify-center gap-2 max-w-[95vw] overflow-x-auto p-2 bg-black/50 rounded-lg backdrop-blur-sm cursor-default" onClick={(e) => e.stopPropagation()}>
             {galleryImages.map((img, i) => (
               <button
                 key={i}
@@ -129,20 +135,30 @@ export function ImagePreviewDialog({ url, images, initialIndex = 0, children }: 
         )}
 
         {/* Action Bar */}
-        <div className="flex items-center gap-2 bg-background/90 backdrop-blur-sm rounded-lg px-3 py-2 shadow">
-          <CopyButton text={currentUrl} className="h-7 w-7" />
-          <span className="text-[10px] text-muted-foreground">Sao chép liên kết</span>
+        <div className="flex items-center gap-1.5 bg-background/90 backdrop-blur-sm rounded-lg px-3 py-2 shadow max-w-[95vw] overflow-x-auto whitespace-nowrap cursor-default" onClick={(e) => e.stopPropagation()}>
+          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5 px-2" onClick={() => { navigator.clipboard.writeText(currentUrl); toast.success("Đã copy liên kết ảnh"); }}>
+            <Copy className="h-3 w-3" /> Sao chép liên kết
+          </Button>
           {isDrive && (
             <>
-              <Separator orientation="vertical" className="h-5" />
-              <CopyButton text={driveToPreviewUrl(currentUrl)} className="h-7 w-7" />
-              <span className="text-[10px] text-muted-foreground">Copy link xem trực tiếp</span>
+              <Separator orientation="vertical" className="h-5 mx-1" />
+              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5 px-2" onClick={() => { navigator.clipboard.writeText(driveToPreviewUrl(currentUrl)); toast.success("Đã copy link xem trực tiếp"); }}>
+                <Copy className="h-3 w-3" /> Copy link xem trực tiếp
+              </Button>
             </>
           )}
-          <Separator orientation="vertical" className="h-5" />
-          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => window.open(currentUrl, "_blank")}>
+          <Separator orientation="vertical" className="h-5 mx-1" />
+          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5 px-2" onClick={() => window.open(currentUrl, "_blank")}>
             <ExternalLink className="h-3 w-3" /> Xem tại trang đích
           </Button>
+          {galleryImages.length > 1 && (
+            <>
+              <Separator orientation="vertical" className="h-5 mx-1" />
+              <span className="text-[10px] text-muted-foreground flex items-center gap-1 px-1">
+                Dùng phím <kbd className="px-1 py-0.5 bg-muted rounded border text-[9px] font-sans flex items-center justify-center"><ChevronLeft className="h-3 w-3" /></kbd> <kbd className="px-1 py-0.5 bg-muted rounded border text-[9px] font-sans flex items-center justify-center"><ChevronRight className="h-3 w-3" /></kbd> để lướt ảnh
+              </span>
+            </>
+          )}
         </div>
       </DialogContent>
     </Dialog>

@@ -60,9 +60,6 @@ model Idea {
   fileRevisionNote  String?  @map("file_revision_note")
   fileAssignee      User?    @relation("FileAssignee", fields: [fileAssigneeId], references: [id])
   designFileUrl     String?  @map("design_file_url")
-  // Amazon/Etsy content - filled at idea creation
-  title             String?
-  description       String?
   // Product dimensions & material
   widthCm           Float?   @map("width_cm")
   heightCm          Float?   @map("height_cm")
@@ -106,8 +103,8 @@ model AmazonListing {
   itemHighlights      String?  @map("item_highlights")
   bulletPoints        String?  @map("bullet_points") // JSON array of 5 strings
   description         String?
-  tags                String?
-  slugs               String? // newline separated
+  tags                String? // JSON array of strings
+  slugs               String? // JSON array of strings
   price               Float?
   useSharedMainImage  Boolean  @default(true) @map("use_shared_main_image")
   galleryImages       String?  @map("gallery_images") // JSON array of strings (max 9)

@@ -42,6 +42,55 @@ export async function PUT(
     } = body;
 
     const existing = await db.etsyListing.findUnique({ where: { ideaId: id } });
+
+    // --- Backend Validation for Listing Status Transitions ---
+    if (listingStatus === "uploading") {
+      const finalTitle = title ?? existing?.title;
+      const finalDesc = description ?? existing?.description;
+      const finalPrice = price ?? existing?.price;
+
+      let finalTags = [];
+      if (tags) finalTags = tags;
+      else if (existing?.tags) { try { finalTags = JSON.parse(existing.tags); } catch {} }
+
+      let finalGallery = [];
+      if (galleryImages) finalGallery = galleryImages;
+      else if (existing?.galleryImages) { try { finalGallery = JSON.parse(existing.galleryImages); } catch {} }
+      const validGallery = finalGallery.filter((g: string) => g && g.trim());
+
+      const finalSharedGallery = useSharedGallery ?? existing?.useSharedGallery ?? false;
+      const finalAccountId = sellingAccountId ?? existing?.sellingAccountId;
+
+      const missing = [];
+      if (!finalTitle?.trim()) missing.push("Title");
+      if (!finalDesc?.trim()) missing.push("Description");
+      if (finalTags.length === 0) missing.push("Tags");
+      if (!finalPrice) missing.push("Giá");
+      if (validGallery.length === 0 && !finalSharedGallery) missing.push("Gallery Images");
+
+      if (missing.length > 0) {
+        return NextResponse.json({ error: "Sản phẩm chưa đủ điều kiện up! Thiếu: " + missing.join(", ") }, { status: 400 });
+      }
+      if (!finalAccountId) {
+        return NextResponse.json({ error: "Vui lòng chọn tài khoản đăng bán!" }, { status: 400 });
+      }
+    }
+
+    if (listingStatus === "selling") {
+      const finalListingId = listingId ?? existing?.listingId;
+      if (!finalListingId) {
+        return NextResponse.json({ error: "Vui lòng nhập Listing ID trước khi chuyển sang 'Đã lên'!" }, { status: 400 });
+      }
+    }
+
+    if (listingStatus === "error" || listingStatus === "delisted") {
+      const finalReason = listingStatusReason ?? existing?.listingStatusReason;
+      if (!finalReason) {
+        return NextResponse.json({ error: `Vui lòng nhập lý do ${listingStatus === "error" ? "lỗi" : "bị gỡ"}!` }, { status: 400 });
+      }
+    }
+    // ---------------------------------------------------------
+
     const listing = await db.etsyListing.upsert({
       where: { ideaId: id },
       update: {

@@ -337,7 +337,8 @@ export default function IdeasPage() {
   const topicId = searchParams.get("topicId");
   const month = searchParams.get("month");
 
-  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [ideas, setIdeas] = useState<IdeaRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -474,16 +475,12 @@ export default function IdeasPage() {
     fetch("/api/topics").then(r => r.json()).then(setTopics).catch(() => { });
   }, []);
 
-  useEffect(() => {
-    // We rely on URL parameters exclusively now
-  }, [searchParams]);
-
   const fetchIdeas = useCallback(async () => {
     if (!sessionReady) return;
     setLoading(true);
     try {
       const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
-      if (search) params.set("search", search);
+      if (searchQuery) params.set("search", searchQuery);
       if (ideaStatus) params.set("ideaStatus", ideaStatus);
       if (photoStatus) params.set("photoStatus", photoStatus);
       if (amazonStatus) params.set("amazonStatus", amazonStatus);
@@ -509,21 +506,23 @@ export default function IdeasPage() {
     } finally {
       setLoading(false);
     }
-  }, [ideaStatus, photoStatus, amazonStatus, etsyStatus, fulfillmentType, urlMine, search, topicId, month, page, pageSize, isEmployee, sessionReady]);
+  }, [ideaStatus, photoStatus, amazonStatus, etsyStatus, fulfillmentType, urlMine, searchQuery, topicId, month, page, pageSize, isEmployee, sessionReady]);
 
+  // Initial load & dependency load
   useEffect(() => {
     fetchIdeas();
   }, [fetchIdeas]);
 
-  // Debounced search
+  // Debounced search logic
   useEffect(() => {
     const timer = setTimeout(() => {
-      setPage(1);
-      fetchIdeas();
+      if (searchInput !== searchQuery) {
+        setPage(1);
+        setSearchQuery(searchInput);
+      }
     }, 300);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
+  }, [searchInput, searchQuery]);
 
   return (
     <div className="space-y-4">
@@ -552,8 +551,8 @@ export default function IdeasPage() {
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Tìm theo SKU / MSKU..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             className="pl-8"
           />
         </div>
