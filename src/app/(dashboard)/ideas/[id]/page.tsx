@@ -16,7 +16,6 @@ import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetTrigger } from "@/components/ui/sheet";
 import { AuditLogViewer } from "@/components/audit-log-viewer";
 import { ImagePreviewDialog } from "@/components/image-preview-dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Select,
@@ -54,11 +53,9 @@ import {
   ShieldCheck,
   AlertTriangle,
   Pencil,
-  Edit3,
   XCircle,
   X,
   Trash2,
-  FileText,
   Upload,
   ShoppingBag,
   Printer,
@@ -67,7 +64,6 @@ import {
   Type,
   AlignLeft,
   Sparkles, Terminal,
-  Link2,
   MessageSquareWarning,
   Package,
   Calendar,
@@ -77,6 +73,7 @@ import {
   Store,
   ChevronDown,
   ChevronUp,
+  UserCircle,
 } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
 import { toast } from "sonner";
@@ -150,13 +147,9 @@ export default function IdeaDetailPage() {
   const [idea, setIdea] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [lightboxOpen, setLightboxOpen] = useState(false);
-  const [lightboxIndex, setLightboxIndex] = useState(0);
-  const [lightboxImages, setLightboxImages] = useState<string[]>([]);
   const [reviewComment, setReviewComment] = useState("");
   const [actionType, setActionType] = useState<"approve" | "reject" | "revise" | null>(null);
   const [photoRevisionInput, setPhotoRevisionInput] = useState("");
-  const [promptExpanded, setPromptExpanded] = useState(false);
   const [labelPrintQty, setLabelPrintQty] = useState(1);
   const [autoNext, setAutoNext] = useState(true);
 
@@ -167,7 +160,6 @@ export default function IdeaDetailPage() {
   const [etsyEditOpen, setEtsyEditOpen] = useState(false);
   const [changeFulfillmentOpen, setChangeFulfillmentOpen] = useState(false);
   const [pendingFulfillment, setPendingFulfillment] = useState<"FBM" | "FBA" | null>(null);
-  const [amzInfoExpanded, setAmzInfoExpanded] = useState(true);
 
   // Idea general form state — only prompt (title/description belong to Amazon/Etsy)
   const [ideaForm, setIdeaForm] = useState({ prompt: "" });
@@ -179,7 +171,7 @@ export default function IdeaDetailPage() {
     description: "", tags: "", slugs: "", price: "", useSharedMainImage: true,
     galleryImages: [""], videoUrl: "", contentAPlusUrl: "",
     listingStatus: "ready", listingStatusReason: "", vineStatus: "not_enrolled",
-    vineReviewUrl: "", photosUploaded: false,
+    photosUploaded: false,
   });
 
   // Etsy listing form state
@@ -213,7 +205,7 @@ export default function IdeaDetailPage() {
           galleryImages: (() => { try { const g = JSON.parse(a.galleryImages || "[]"); return g.length ? g : [""]; } catch { return [""]; } })(),
           videoUrl: a.videoUrl || "", contentAPlusUrl: a.contentAPlusUrl || "",
           listingStatus: a.listingStatus || "ready", listingStatusReason: a.listingStatusReason || "",
-          vineStatus: a.vineStatus || "not_enrolled", vineReviewUrl: a.vineReviewUrl || "",
+          vineStatus: a.vineStatus || "not_enrolled",
           photosUploaded: a.photosUploaded ?? false,
         });
       } else {
@@ -315,9 +307,6 @@ export default function IdeaDetailPage() {
   };
 
   const handleSaveAmazon = async () => {
-    console.log("=== START handleSaveAmazon ===");
-    console.log("amzForm.asin value:", amzForm.asin);
-
     setSaving(true);
     try {
       let autoStatus = amzForm.listingStatus;
@@ -335,29 +324,22 @@ export default function IdeaDetailPage() {
         }
       }
       const payload = { ...amzForm, listingStatus: autoStatus, bulletPoints: amzForm.bulletPoints.filter((b) => b.trim()), galleryImages: amzForm.galleryImages.filter((g) => g.trim()) };
-      console.log("Payload sent to API:", payload);
-
       const res = await fetch(`/api/ideas/${id}/amazon-listing`, {
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
-      console.log("API response status:", res.status, res.ok);
-
       if (res.ok) {
         const data = await res.json();
-        console.log("API response data (success):", data);
         toast.success("Đã lưu Amazon Listing!");
         setAmzEditOpen(false);
         fetchIdea();
       }
       else {
         const data = await res.json();
-        console.error("API error response:", data);
         toast.error(data.error || "Lỗi lưu Amazon Listing");
       }
     } catch (err) {
-      console.error("handleSaveAmazon caught error:", err);
       toast.error("Lỗi hệ thống");
     }
     finally { setSaving(false); }
@@ -548,17 +530,17 @@ export default function IdeaDetailPage() {
             <Pencil className="h-3 w-3 mr-1" /> Sửa link ảnh
           </Button>
         </div>
-        <div className="flex flex-row overflow-x-auto gap-2 pb-2 scrollbar-thin">
+        <div className="grid grid-cols-5 gap-2 pb-2">
           {cells.map((img, i) =>
             img ? (
               <ImagePreviewDialog key={i} images={images as string[]} initialIndex={i}>
-                <div className="w-16 h-16 shrink-0 bg-muted/40 border border-dashed border-muted-foreground/30 rounded flex items-center justify-center overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all">
+                <div className="aspect-square bg-muted/40 border border-dashed border-muted-foreground/30 rounded flex items-center justify-center overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all">
                   <img src={driveToThumbnailUrl(img as string, 150)} alt={`Ảnh ${i + 1}`} className="w-full h-full object-cover" />
                 </div>
               </ImagePreviewDialog>
             ) : (
-              <div key={i} className="w-16 h-16 shrink-0 bg-muted/40 border border-dashed border-muted-foreground/30 rounded flex items-center justify-center overflow-hidden cursor-not-allowed">
-                <span className="text-[10px] text-muted-foreground text-center px-1">Chưa có ảnh</span>
+              <div key={i} className="aspect-square bg-muted/40 border border-dashed border-muted-foreground/30 rounded flex flex-col items-center justify-center overflow-hidden cursor-not-allowed">
+                <span className="text-[8px] text-muted-foreground text-center px-0.5 leading-tight">Chưa có<br />ảnh</span>
               </div>
             )
           )}
@@ -642,13 +624,13 @@ export default function IdeaDetailPage() {
   const sourceLinks: string[] = (() => { try { return JSON.parse(idea.sourceLinks || "[]"); } catch { return []; } })();
   const canApprove = role && can(role, "approve_idea") && (idea.status === "reviewing" || idea.status === "revision_requested");
   const canManagePhotos = role && can(role, "assign_photo_task");
-  const inProduction = (idea.amazonListing?.listingStatus === "published" || idea.etsyListing?.listingStatus === "published") || idea.fileStatus === "approved" || !!idea.productionFileUrl;
+  const inProduction = (idea.amazonListing?.listingStatus === "published" || idea.etsyListing?.listingStatus === "published") || idea.fileStatus === "approved" || !!idea.designFileUrl;
   const deleteContext = (() => {
     if (!role) return { canDelete: false, reason: "Chưa đăng nhập" };
     if (inProduction) return { canDelete: false, reason: "Ý tưởng đã đi vào sản xuất hoặc đăng bán" };
     if (role === "employee") {
       if (idea.createdById !== session?.user?.id) return { canDelete: false, reason: "Bạn chỉ có thể xoá ý tưởng của chính mình" };
-      if (!(idea.status === "reviewing" || (idea.status === "approved" && (idea.photoStatus === "not_requested" || idea.photoStatus === "awaiting_photos") && idea.fileStatus !== "approved" && !idea.productionFileUrl))) {
+      if (!(idea.status === "reviewing" || (idea.status === "approved" && (idea.photoStatus === "not_requested" || idea.photoStatus === "awaiting_photos") && idea.fileStatus !== "approved" && !idea.designFileUrl))) {
         return { canDelete: false, reason: "Trạng thái hiện tại không cho phép xoá" };
       }
     }
@@ -701,9 +683,12 @@ export default function IdeaDetailPage() {
               {/* Action buttons — right side */}
               <div className="flex items-center gap-1 shrink-0">
                 {/* 1. Edit */}
-                <Tooltip><TooltipTrigger asChild>
                   <Sheet open={editOpen} onOpenChange={setEditOpen}>
-                    <SheetTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" disabled={(idea.amazonListing?.listingStatus === "published" || idea.etsyListing?.listingStatus === "published")}><Pencil className="h-3.5 w-3.5" /></Button></SheetTrigger>
+                    <Tooltip><TooltipTrigger asChild>
+                      <span>
+                        <SheetTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" disabled={(idea.amazonListing?.listingStatus === "published" || idea.etsyListing?.listingStatus === "published")}><Pencil className="h-3.5 w-3.5" /></Button></SheetTrigger>
+                      </span>
+                    </TooltipTrigger><TooltipContent sideOffset={5} className="z-[100]">Sửa prompt & ảnh</TooltipContent></Tooltip>
                     <SheetContent side="right" className="w-[520px] sm:max-w-[520px] p-6 z-[100]">
                       <SheetHeader className="mb-4"><SheetTitle>Chỉnh sửa nội dung</SheetTitle><SheetDescription>{idea.msku}</SheetDescription></SheetHeader>
                       <div className="flex-1 overflow-y-auto pr-1">
@@ -727,19 +712,23 @@ export default function IdeaDetailPage() {
                       </div>
                     </SheetContent>
                   </Sheet>
-                </TooltipTrigger><TooltipContent sideOffset={5} className="z-[100]">Sửa prompt & ảnh</TooltipContent></Tooltip>
 
                 {/* 2. Make a Copy */}
                 <Tooltip><TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => router.push(`/ideas/new?cloneFrom=${id}`)} disabled={saving}>
-                    <Copy className="h-3.5 w-3.5" />
-                  </Button>
+                  <span>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => router.push(`/ideas/new?cloneFrom=${id}`)} disabled={saving}>
+                      <Copy className="h-3.5 w-3.5" />
+                    </Button>
+                  </span>
                 </TooltipTrigger><TooltipContent sideOffset={5} className="z-[100]">Tạo bản sao</TooltipContent></Tooltip>
 
                 {/* 3. History */}
-                <Tooltip><TooltipTrigger asChild>
                   <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
-                    <SheetTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><History className="h-4 w-4" /></Button></SheetTrigger>
+                    <Tooltip><TooltipTrigger asChild>
+                      <span>
+                        <SheetTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><History className="h-4 w-4" /></Button></SheetTrigger>
+                      </span>
+                    </TooltipTrigger><TooltipContent sideOffset={5} className="z-[100]">Lịch sử thay đổi</TooltipContent></Tooltip>
                     <SheetContent side="right" className="w-[480px] sm:max-w-[480px] z-[100]">
                       <SheetHeader><SheetTitle>Lịch sử thay đổi</SheetTitle><SheetDescription>{idea.msku}</SheetDescription></SheetHeader>
                       <div className="mt-4 overflow-y-auto max-h-[calc(100vh-10rem)]">
@@ -747,7 +736,6 @@ export default function IdeaDetailPage() {
                       </div>
                     </SheetContent>
                   </Sheet>
-                </TooltipTrigger><TooltipContent sideOffset={5} className="z-[100]">Lịch sử thay đổi</TooltipContent></Tooltip>
 
                 {/* 4. Delete */}
                 <AlertDialog>
@@ -814,39 +802,42 @@ export default function IdeaDetailPage() {
                 )}
 
                 {canApprove && idea.status === "reviewing" && (
-                  <div className="flex gap-2 ml-1.5 pl-1.5 border-l">
-                    <Dialog open={actionType === "reject" || actionType === "revise"} onOpenChange={(open) => !open && setActionType(null)}>
-                      <DialogTrigger asChild>
-                        <div className="flex gap-1">
-                          <Button variant="outline" size="sm" className="h-8 text-xs text-red-600 border-red-200 hover:bg-red-50" onClick={() => setActionType("reject")}>Từ chối</Button>
-                          <Button variant="outline" size="sm" className="h-8 text-xs text-amber-600 border-amber-200 hover:bg-amber-50" onClick={() => setActionType("revise")}>Yêu cầu sửa</Button>
-                        </div>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader><DialogTitle>{actionType === "reject" ? "Từ chối?" : "Yêu cầu sửa?"}</DialogTitle></DialogHeader>
-                        <div className="mt-2 space-y-3">
-                          <Label htmlFor="rc">Lý do (Bắt buộc)</Label>
-                          <Textarea id="rc" autoFocus value={reviewComment} onChange={e => setReviewComment(e.target.value)}
-                            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleReviewAction(); } }}
-                            placeholder="Nhập lý do..." rows={4} className="resize-none" />
-                        </div>
-                        <div className="mt-3 flex justify-between items-center gap-2">
-                          <div className="flex items-center gap-2 pl-1">
-                            <Checkbox id="auto-next-reject" checked={autoNext} onCheckedChange={(v) => setAutoNext(!!v)} />
-                            <Label htmlFor="auto-next-reject" className="text-xs text-muted-foreground cursor-pointer">Tự động sang bài kế tiếp</Label>
+                  <div className="flex items-center ml-1.5 pl-1.5 border-l">
+                    <div className="flex items-center bg-muted/30 p-1 rounded-md">
+                      
+                      <Dialog open={actionType === "reject" || actionType === "revise"} onOpenChange={(open) => !open && setActionType(null)}>
+                        <DialogTrigger asChild>
+                          <div className="flex items-center">
+                            <Button variant="outline" size="sm" className="h-8 text-xs text-red-600 border-red-200 hover:bg-red-50" onClick={() => setActionType("reject")}>Từ chối</Button>
+                            <div className="flex items-center pl-1 border-l border-border/50 ml-1">
+                              <Button variant="outline" size="sm" className="h-8 text-xs text-amber-600 border-amber-200 hover:bg-amber-50" onClick={() => setActionType("revise")}>Yêu cầu sửa</Button>
+                            </div>
                           </div>
-                          <div className="flex justify-end gap-2">
-                            <Button variant="ghost" onClick={() => { setActionType(null); setReviewComment(""); }}>Huỷ</Button>
-                            <Button onClick={() => handleReviewAction()} disabled={saving} className={actionType === "reject" ? "bg-red-600" : "bg-amber-600"}>
-                              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Xác nhận {actionType === "reject" ? "từ chối" : "yêu cầu sửa"}
-                            </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader><DialogTitle>{actionType === "reject" ? "Từ chối?" : "Yêu cầu sửa?"}</DialogTitle></DialogHeader>
+                          <div className="mt-2 space-y-3">
+                            <Label htmlFor="rc">Lý do (Bắt buộc)</Label>
+                            <Textarea id="rc" autoFocus value={reviewComment} onChange={e => setReviewComment(e.target.value)}
+                              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleReviewAction(); } }}
+                              placeholder="Nhập lý do..." rows={4} className="resize-none" />
                           </div>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
+                          <div className="mt-3 flex justify-between items-center gap-2">
+                            <div className="flex items-center gap-2 pl-1">
+                              <Checkbox id="auto-next-reject" checked={autoNext} onCheckedChange={(v) => setAutoNext(!!v)} />
+                              <Label htmlFor="auto-next-reject" className="text-xs text-muted-foreground cursor-pointer">Tự động sang bài kế tiếp</Label>
+                            </div>
+                            <div className="flex justify-end gap-2">
+                              <Button variant="ghost" onClick={() => { setActionType(null); setReviewComment(""); }}>Huỷ</Button>
+                              <Button onClick={() => handleReviewAction()} disabled={saving} className={actionType === "reject" ? "bg-red-600" : "bg-amber-600"}>
+                                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Xác nhận {actionType === "reject" ? "từ chối" : "yêu cầu sửa"}
+                              </Button>
+                            </div>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
 
-                    <div className="flex items-center gap-1.5 ml-1 bg-muted/30 p-1 rounded-md">
-                      <div className="flex gap-1">
+                      <div className="flex items-center gap-1 pl-1 border-l border-border/50 ml-1">
                         <TooltipProvider><Tooltip>
                           <TooltipTrigger asChild>
                             <Button size="sm" className="h-8 text-xs px-2 bg-green-600 hover:bg-green-700 text-white" onClick={() => handleReviewAction("approve", true, "FBM")} disabled={saving}><ImageIcon className="mr-1 h-3.5 w-3.5" /> Duyệt FBM</Button>
@@ -860,6 +851,7 @@ export default function IdeaDetailPage() {
                           <TooltipContent>Sản xuất hàng loạt, đợi file sx + sp thật rồi mới chụp</TooltipContent>
                         </Tooltip></TooltipProvider>
                       </div>
+
                       <div className="flex items-center gap-1.5 px-2 border-l border-border/50 ml-1">
                         <Checkbox id="auto-next-approve" checked={autoNext} onCheckedChange={(v) => setAutoNext(!!v)} />
                         <Label htmlFor="auto-next-approve" className="text-[10px] text-muted-foreground cursor-pointer leading-tight">Auto<br />Next</Label>
@@ -952,7 +944,7 @@ export default function IdeaDetailPage() {
                             </div>
                           </CardTitle>
                           <div className="flex items-center gap-2">
-                            {role !== "employee" && <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => { setAmzForm(idea.amazonListing || { ideaId: id, listingStatus: "ready", fulfillmentType: idea.fulfillmentType || "FBA" }); setAmzEditOpen(true); }}><Edit3 className="h-3.5 w-3.5 mr-1.5" /> Sửa</Button>}
+                            {role !== "employee" && <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => { setAmzForm(idea.amazonListing || { ideaId: id, listingStatus: "ready", fulfillmentType: idea.fulfillmentType || "FBA" }); setAmzEditOpen(true); }}><Pencil className="h-3.5 w-3.5 mr-1.5" /> Sửa</Button>}
                           </div>
                         </CardHeader>
                         <CardContent className="text-sm pt-2">
@@ -1002,7 +994,25 @@ export default function IdeaDetailPage() {
                                     </div>
                                   </div>
 
-                                  {/* Row 3: FNSKU & Print Label combined */}
+                                  {/* Row 3: Vine Status & Auto Campaign */}
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div className="group/vine flex flex-col justify-center rounded-md bg-muted/40 px-2.5 py-1.5 border border-transparent hover:border-border/50 transition-colors">
+                                      <span className="text-[10px] text-muted-foreground block mb-0.5">Vine Status</span>
+                                      <span className={`text-xs font-medium truncate ${
+                                        idea.amazonListing?.vineStatus === 'not_enrolled' ? 'text-muted-foreground' : 'text-blue-700'
+                                      }`}>
+                                        {idea.amazonListing?.vineStatus === 'enrolled' ? 'Enrolled' : idea.amazonListing?.vineStatus === 'reviewing' ? 'Reviewing' : idea.amazonListing?.vineStatus === 'completed' ? 'Completed' : 'Not Enrolled'}
+                                      </span>
+                                    </div>
+                                    <div className="group/camp flex flex-col justify-center rounded-md bg-muted/40 px-2.5 py-1.5 border border-transparent hover:border-border/50 transition-colors">
+                                      <span className="text-[10px] text-muted-foreground block mb-0.5">Auto Campaign</span>
+                                      <span className="text-xs font-medium">
+                                        {idea.amazonListing?.campAuto ? "✅ Đã bật" : "❌ Tắt"}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Row 4: FNSKU & Print Label combined */}
                                   <div className="group/fnsku flex items-center justify-between rounded-md bg-muted/40 p-2 border border-transparent hover:border-border/50 transition-colors">
                                     <div className="flex items-center gap-3">
                                       {/* Thumbnail */}
@@ -1351,10 +1361,12 @@ export default function IdeaDetailPage() {
               )}
             </div>
 
+            <Separator />
+
             {/* Origin */}
-            <div className="px-3 pb-3">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Nguồn gốc ý tưởng/ sản phẩm</span>
-              <div className="flex flex-wrap gap-2">
+            <div className="p-3 space-y-2">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Nguồn gốc</span>
+              <div className="flex flex-wrap gap-2 px-1">
                 {sourceLinks.length === 0 ? (
                   <ButtonIconHover variant="outline" size="sm" className="h-7 text-[10px] bg-background shadow-sm hover:bg-muted/50 rounded-full px-3 w-fit opacity-50 cursor-not-allowed">
                     Chưa có nguồn gốc
@@ -1386,10 +1398,11 @@ export default function IdeaDetailPage() {
               <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Thông tin chung</span>
               <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] px-1">
                 <div className="flex items-center gap-1.5 text-muted-foreground"><Package className="h-3 w-3" /> MSKU</div><div className="text-right flex items-center justify-end gap-1"><code className="bg-muted px-1 rounded">{idea.msku}</code><CopyButton text={idea.msku} className="h-3 w-3 text-muted-foreground hover:text-foreground" /></div>
-                <div className="flex items-center gap-1.5 text-muted-foreground"><Layers className="h-3 w-3" /> Chủ đề</div><span className="text-right font-medium">{idea.topic.name}</span>
+                <div className="flex items-center gap-1.5 text-muted-foreground"><UserCircle className="h-3 w-3" /> Sản phẩm của</div><span className="text-right font-medium truncate">{idea.source === "partner" ? `Đối tác: ${idea.partner?.name || idea.partnerLabel || "—"}` : idea.source === "boss" ? `Boss: ${idea.createdBy?.fullName || "—"}` : `Nhân viên: ${idea.createdBy?.fullName || "—"}`}</span>
+                <div className="flex items-center gap-1.5 text-muted-foreground"><Layers className="h-3 w-3" /> Chủ đề</div><span className="text-right font-medium truncate">{idea.topic?.name || "—"}</span>
                 <div className="flex items-center gap-1.5 text-muted-foreground"><Calendar className="h-3 w-3" /> Ngày tạo</div><span className="text-right font-medium">{new Date(idea.createdAt).toLocaleDateString("vi-VN")}</span>
-                {idea.widthCm && <><div className="flex items-center gap-1.5 text-muted-foreground"><Ruler className="h-3 w-3" /> Kích thước</div><span className="text-right font-medium">{idea.widthCm}×{idea.heightCm}×{idea.thicknessMm}mm</span></>}
-                {idea.material && <><div className="flex items-center gap-1.5 text-muted-foreground"><Layers className="h-3 w-3" /> Chất liệu</div><span className="text-right font-medium">{idea.material}</span></>}
+                <div className="flex items-center gap-1.5 text-muted-foreground"><Ruler className="h-3 w-3" /> Kích thước</div><span className="text-right font-medium">{idea.widthCm ? `${idea.widthCm}×${idea.heightCm}×${idea.thicknessMm}mm` : "—"}</span>
+                <div className="flex items-center gap-1.5 text-muted-foreground"><Layers className="h-3 w-3" /> Vật liệu</div><span className="text-right font-medium truncate">{idea.material || "—"}</span>
               </div>
             </div>
 
@@ -1403,12 +1416,24 @@ export default function IdeaDetailPage() {
                   <span className="text-muted-foreground font-medium">Trạng thái file:</span>
                   {statusBadge(idea.fileStatus || "not_requested", fileStatusLabels)}
                 </div>
+                {idea.fileAssignee && (
+                  <div className="flex items-center justify-between text-[11px] px-1">
+                    <span className="text-muted-foreground font-medium">Người nhận file:</span>
+                    <span className="font-medium truncate max-w-[150px] text-right">{idea.fileAssignee.fullName}</span>
+                  </div>
+                )}
                 {idea.designFileUrl && (
                   <div className="flex items-center justify-between text-[11px] px-1">
                     <span className="text-muted-foreground font-medium">Link file:</span>
                     <a href={idea.designFileUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-1 bg-blue-50 px-2 py-1 rounded">
                       <ExternalLink className="h-3 w-3" /> Xem file thiết kế
                     </a>
+                  </div>
+                )}
+                {idea.fileRevisionNote && (
+                  <div className="text-[11px] px-1.5 py-1.5 mt-1 bg-amber-50 text-amber-800 rounded border border-amber-200">
+                    <span className="font-semibold block mb-0.5">Ghi chú sửa:</span>
+                    <span className="block whitespace-pre-wrap">{idea.fileRevisionNote}</span>
                   </div>
                 )}
               </div>
@@ -1438,6 +1463,25 @@ export default function IdeaDetailPage() {
 
 
       </div>
+        <AlertDialog open={changeFulfillmentOpen} onOpenChange={setChangeFulfillmentOpen}>
+          <AlertDialogContent className="z-[100]">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                Xác nhận chuyển đổi phương thức Fulfillment
+              </AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div className="space-y-2 text-sm text-muted-foreground mt-2">
+                  <p>Bạn có chắc chắn muốn chuyển đổi sang <strong>{pendingFulfillment}</strong> không?</p>
+                  <p className="text-destructive font-medium">Lưu ý: Hành động này có thể ảnh hưởng đến quy trình in tem và vận chuyển.</p>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => { setChangeFulfillmentOpen(false); setPendingFulfillment(null); }}>Huỷ</AlertDialogCancel>
+              <AlertDialogAction onClick={handleChangeFulfillment} className="bg-amber-600 hover:bg-amber-700 text-white">Chuyển đổi</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
     </TooltipProvider>
   );
 }

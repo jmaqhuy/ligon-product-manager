@@ -365,9 +365,9 @@ export default function IdeasPage() {
     });
   }, []);
 
-  const canDeleteIdea = (idea: { createdById?: string; status: string; fileStatus?: string; productionFileUrl?: string | null; photoStatus?: string }) => {
+  const canDeleteIdea = (idea: { createdById?: string; status: string; fileStatus?: string; designFileUrl?: string | null; photoStatus?: string }) => {
     // Determine if in production (same as backend logic)
-    const inProduction = idea.fileStatus === "approved" || idea.fileStatus === "approved" || !!idea.productionFileUrl;
+    const inProduction = idea.fileStatus === "approved" || idea.fileStatus === "approved" || !!idea.designFileUrl;
     if (inProduction) return false;
 
     if (role === "boss" || role === "manager") return true;
@@ -378,7 +378,7 @@ export default function IdeasPage() {
       idea.status === "approved" &&
       (idea.photoStatus === "not_requested" || idea.photoStatus === "awaiting_photos") &&
       idea.fileStatus !== "approved" &&
-      !idea.productionFileUrl
+      !idea.designFileUrl
     ) {
       return true;
     }

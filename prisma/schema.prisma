@@ -59,7 +59,7 @@ model Idea {
   fileAssigneeId    String?  @map("file_assignee_id")
   fileRevisionNote  String?  @map("file_revision_note")
   fileAssignee      User?    @relation("FileAssignee", fields: [fileAssigneeId], references: [id])
-  productionFileUrl String?  @map("production_file_url")
+  designFileUrl     String?  @map("design_file_url")
   // Amazon/Etsy content - filled at idea creation
   title             String?
   description       String?
@@ -118,7 +118,7 @@ model AmazonListing {
   fulfillmentType     String   @default("FBA") @map("fulfillment_type") // FBA | FBM
   campAuto            Boolean  @default(false) @map("camp_auto")
   vineStatus          String   @default("not_enrolled") @map("vine_status") // not_enrolled | enrolled | reviewing | completed
-  vineReviewUrl       String?  @map("vine_review_url")
+
   photosUploaded      Boolean  @default(false) @map("photos_uploaded") // Đã up ảnh thật (không phải ảnh tạm)
   photoStatus         String   @default("not_requested") @map("photo_status") // not_requested | awaiting_photos | pending_approval | revision_requested | approved
   photoAssigneeId     String?  @map("photo_assignee_id")

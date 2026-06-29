@@ -488,9 +488,9 @@ export default function ProductionPage() {
                             )}
                             {/* Production file link */}
                             <div className="flex items-center gap-3 mt-1.5 text-xs">
-                              {req.idea.productionFileUrl ? (
+                              {req.idea.designFileUrl ? (
                                 <a
-                                  href={req.idea.productionFileUrl}
+                                  href={req.idea.designFileUrl}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="flex items-center gap-1 text-blue-600 hover:underline"

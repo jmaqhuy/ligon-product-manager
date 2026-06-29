@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
             msku: true,
             amazonListing: { select: { sku: true, fulfillmentType: true, itemName: true } },
             mainImageUrl: true,
-            productionFileUrl: true,
+            designFileUrl: true,
           },
         },
         steps: {

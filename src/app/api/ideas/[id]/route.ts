@@ -138,8 +138,8 @@ export async function PATCH(
     }
 
     // Production file URL
-    if (body.productionFileUrl !== undefined) {
-      updateData.productionFileUrl = body.productionFileUrl;
+    if (body.designFileUrl !== undefined) {
+      updateData.designFileUrl = body.designFileUrl;
     }
     if (body.partnerLabel !== undefined) {
       updateData.partnerLabel = body.partnerLabel;
@@ -298,7 +298,7 @@ export async function DELETE(
       idea.amazonListing?.listingStatus === "published" ||
       idea.etsyListing?.listingStatus === "published" ||
       idea.fileStatus === "approved" || 
-      !!idea.productionFileUrl || 
+      !!idea.designFileUrl || 
       idea.productionRequests.length > 0;
 
     if (inProduction) {
