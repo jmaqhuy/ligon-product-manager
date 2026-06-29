@@ -253,8 +253,16 @@ export default function IdeaDetailPage() {
         toast.success(`Đã ${action === "approve" ? "duyệt" : action === "reject" ? "từ chối" : "yêu cầu sửa"} ý tưởng!${requestPhotos ? " Đã yêu cầu làm ảnh." : ""}`);
         if (action === "approve" || action === "reject") {
           if (autoNext) {
-            const listRes = await fetch("/api/ideas?tab=reviewing");
-            if (listRes.ok) { const list = await listRes.json(); const nextIdea = (list.data || list).find((i: any) => i.id !== id); if (nextIdea) { router.push(`/ideas/${nextIdea.id}`); return; } }
+            const listRes = await fetch("/api/ideas?ideaStatus=reviewing");
+            if (listRes.ok) {
+              const list = await listRes.json();
+              const nextIdea = (list.data || list).find((i: any) => i.id !== id);
+              if (nextIdea) {
+                router.push(`/ideas/${nextIdea.id}`);
+                return;
+              }
+            }
+            sessionStorage.setItem("confetti-celebrate", JSON.stringify({ msku: idea.msku, ideaId: id }));
             router.push("/ideas");
           } else {
             fetchIdea(); setActionType(null); setReviewComment("");
@@ -683,35 +691,35 @@ export default function IdeaDetailPage() {
               {/* Action buttons — right side */}
               <div className="flex items-center gap-1 shrink-0">
                 {/* 1. Edit */}
-                  <Sheet open={editOpen} onOpenChange={setEditOpen}>
-                    <Tooltip><TooltipTrigger asChild>
-                      <span>
-                        <SheetTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" disabled={(idea.amazonListing?.listingStatus === "published" || idea.etsyListing?.listingStatus === "published")}><Pencil className="h-3.5 w-3.5" /></Button></SheetTrigger>
-                      </span>
-                    </TooltipTrigger><TooltipContent sideOffset={5} className="z-[100]">Sửa prompt & ảnh</TooltipContent></Tooltip>
-                    <SheetContent side="right" className="w-[520px] sm:max-w-[520px] p-6 z-[100]">
-                      <SheetHeader className="mb-4"><SheetTitle>Chỉnh sửa nội dung</SheetTitle><SheetDescription>{idea.msku}</SheetDescription></SheetHeader>
-                      <div className="flex-1 overflow-y-auto pr-1">
-                        <div className="space-y-5">
-                          <div className="space-y-2">
-                            <Label htmlFor="ep" className="text-xs flex items-center gap-1.5"><Sparkles className="h-3 w-3 text-amber-500" /> Prompt</Label>
-                            <Textarea id="ep" value={ideaForm.prompt} onChange={e => setIdeaForm({ prompt: e.target.value })} placeholder="Nhập prompt..." rows={8} className="resize-none text-sm" />
-                            <p className="text-[10px] text-muted-foreground">Prompt dùng để lưu trữ và tái sử dụng khi cần tạo sản phẩm tương tự.</p>
-                          </div>
-                          <Separator />
-                          <div className="space-y-2">
-                            <Label htmlFor="eimg" className="text-xs flex items-center gap-1.5"><ImageIcon className="h-3 w-3 text-blue-500" /> Ảnh main (URL)</Label>
-                            <Input id="eimg" value={idea.mainImageUrl || ""} onChange={e => handleUpdateIdea({ mainImageUrl: e.target.value })} placeholder="https://drive.google.com/file/d/..." className="h-9 text-sm" />
-                            <p className="text-[10px] text-muted-foreground">Link Google Drive hoặc link ảnh trực tiếp.</p>
-                          </div>
-                          <div className="flex justify-end gap-2 pt-2">
-                            <Button variant="outline" onClick={() => { setIdeaForm({ prompt: idea.prompt || "" }); }}><X className="h-4 w-4 mr-1" /> Đặt lại</Button>
-                            <Button onClick={handleSaveIdea} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />} Lưu</Button>
-                          </div>
+                <Sheet open={editOpen} onOpenChange={setEditOpen}>
+                  <Tooltip><TooltipTrigger asChild>
+                    <span>
+                      <SheetTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" disabled={(idea.amazonListing?.listingStatus === "published" || idea.etsyListing?.listingStatus === "published")}><Pencil className="h-3.5 w-3.5" /></Button></SheetTrigger>
+                    </span>
+                  </TooltipTrigger><TooltipContent sideOffset={5} className="z-[100]">Sửa prompt & ảnh</TooltipContent></Tooltip>
+                  <SheetContent side="right" className="w-[520px] sm:max-w-[520px] p-6 z-[100]">
+                    <SheetHeader className="mb-4"><SheetTitle>Chỉnh sửa nội dung</SheetTitle><SheetDescription>{idea.msku}</SheetDescription></SheetHeader>
+                    <div className="flex-1 overflow-y-auto pr-1">
+                      <div className="space-y-5">
+                        <div className="space-y-2">
+                          <Label htmlFor="ep" className="text-xs flex items-center gap-1.5"><Sparkles className="h-3 w-3 text-amber-500" /> Prompt</Label>
+                          <Textarea id="ep" value={ideaForm.prompt} onChange={e => setIdeaForm({ prompt: e.target.value })} placeholder="Nhập prompt..." rows={8} className="resize-none text-sm" />
+                          <p className="text-[10px] text-muted-foreground">Prompt dùng để lưu trữ và tái sử dụng khi cần tạo sản phẩm tương tự.</p>
+                        </div>
+                        <Separator />
+                        <div className="space-y-2">
+                          <Label htmlFor="eimg" className="text-xs flex items-center gap-1.5"><ImageIcon className="h-3 w-3 text-blue-500" /> Ảnh main (URL)</Label>
+                          <Input id="eimg" value={idea.mainImageUrl || ""} onChange={e => handleUpdateIdea({ mainImageUrl: e.target.value })} placeholder="https://drive.google.com/file/d/..." className="h-9 text-sm" />
+                          <p className="text-[10px] text-muted-foreground">Link Google Drive hoặc link ảnh trực tiếp.</p>
+                        </div>
+                        <div className="flex justify-end gap-2 pt-2">
+                          <Button variant="outline" onClick={() => { setIdeaForm({ prompt: idea.prompt || "" }); }}><X className="h-4 w-4 mr-1" /> Đặt lại</Button>
+                          <Button onClick={handleSaveIdea} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />} Lưu</Button>
                         </div>
                       </div>
-                    </SheetContent>
-                  </Sheet>
+                    </div>
+                  </SheetContent>
+                </Sheet>
 
                 {/* 2. Make a Copy */}
                 <Tooltip><TooltipTrigger asChild>
@@ -723,19 +731,21 @@ export default function IdeaDetailPage() {
                 </TooltipTrigger><TooltipContent sideOffset={5} className="z-[100]">Tạo bản sao</TooltipContent></Tooltip>
 
                 {/* 3. History */}
-                  <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
-                    <Tooltip><TooltipTrigger asChild>
-                      <span>
-                        <SheetTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><History className="h-4 w-4" /></Button></SheetTrigger>
-                      </span>
-                    </TooltipTrigger><TooltipContent sideOffset={5} className="z-[100]">Lịch sử thay đổi</TooltipContent></Tooltip>
-                    <SheetContent side="right" className="w-[480px] sm:max-w-[480px] z-[100]">
-                      <SheetHeader><SheetTitle>Lịch sử thay đổi</SheetTitle><SheetDescription>{idea.msku}</SheetDescription></SheetHeader>
-                      <div className="mt-4 overflow-y-auto max-h-[calc(100vh-10rem)]">
-                        <AuditLogViewer ideaId={id} />
-                      </div>
-                    </SheetContent>
-                  </Sheet>
+                <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
+                  <Tooltip><TooltipTrigger asChild>
+                    <span>
+                      <SheetTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><History className="h-4 w-4" /></Button></SheetTrigger>
+                    </span>
+                  </TooltipTrigger><TooltipContent sideOffset={5} className="z-[100]">Lịch sử thay đổi</TooltipContent></Tooltip>
+                  <SheetContent side="right" className="w-[480px] sm:max-w-[480px] z-[100]">
+                    <SheetHeader><SheetTitle>Lịch sử thay đổi</SheetTitle><SheetDescription>{idea.msku}</SheetDescription></SheetHeader>
+                    <div className="mt-4 overflow-y-auto max-h-[calc(100vh-10rem)]">
+                      <AuditLogViewer ideaId={id} />
+                    </div>
+                  </SheetContent>
+                </Sheet>
+
+
 
                 {/* 4. Delete */}
                 <AlertDialog>
@@ -804,7 +814,7 @@ export default function IdeaDetailPage() {
                 {canApprove && idea.status === "reviewing" && (
                   <div className="flex items-center ml-1.5 pl-1.5 border-l">
                     <div className="flex items-center bg-muted/30 p-1 rounded-md">
-                      
+
                       <Dialog open={actionType === "reject" || actionType === "revise"} onOpenChange={(open) => !open && setActionType(null)}>
                         <DialogTrigger asChild>
                           <div className="flex items-center">
@@ -998,9 +1008,8 @@ export default function IdeaDetailPage() {
                                   <div className="grid grid-cols-2 gap-2">
                                     <div className="group/vine flex flex-col justify-center rounded-md bg-muted/40 px-2.5 py-1.5 border border-transparent hover:border-border/50 transition-colors">
                                       <span className="text-[10px] text-muted-foreground block mb-0.5">Vine Status</span>
-                                      <span className={`text-xs font-medium truncate ${
-                                        idea.amazonListing?.vineStatus === 'not_enrolled' ? 'text-muted-foreground' : 'text-blue-700'
-                                      }`}>
+                                      <span className={`text-xs font-medium truncate ${idea.amazonListing?.vineStatus === 'not_enrolled' ? 'text-muted-foreground' : 'text-blue-700'
+                                        }`}>
                                         {idea.amazonListing?.vineStatus === 'enrolled' ? 'Enrolled' : idea.amazonListing?.vineStatus === 'reviewing' ? 'Reviewing' : idea.amazonListing?.vineStatus === 'completed' ? 'Completed' : 'Not Enrolled'}
                                       </span>
                                     </div>
@@ -1463,25 +1472,25 @@ export default function IdeaDetailPage() {
 
 
       </div>
-        <AlertDialog open={changeFulfillmentOpen} onOpenChange={setChangeFulfillmentOpen}>
-          <AlertDialogContent className="z-[100]">
-            <AlertDialogHeader>
-              <AlertDialogTitle className="flex items-center gap-2">
-                Xác nhận chuyển đổi phương thức Fulfillment
-              </AlertDialogTitle>
-              <AlertDialogDescription asChild>
-                <div className="space-y-2 text-sm text-muted-foreground mt-2">
-                  <p>Bạn có chắc chắn muốn chuyển đổi sang <strong>{pendingFulfillment}</strong> không?</p>
-                  <p className="text-destructive font-medium">Lưu ý: Hành động này có thể ảnh hưởng đến quy trình in tem và vận chuyển.</p>
-                </div>
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => { setChangeFulfillmentOpen(false); setPendingFulfillment(null); }}>Huỷ</AlertDialogCancel>
-              <AlertDialogAction onClick={handleChangeFulfillment} className="bg-amber-600 hover:bg-amber-700 text-white">Chuyển đổi</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+      <AlertDialog open={changeFulfillmentOpen} onOpenChange={setChangeFulfillmentOpen}>
+        <AlertDialogContent className="z-[100]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              Xác nhận chuyển đổi phương thức Fulfillment
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground mt-2">
+                <p>Bạn có chắc chắn muốn chuyển đổi sang <strong>{pendingFulfillment}</strong> không?</p>
+                <p className="text-destructive font-medium">Lưu ý: Hành động này có thể ảnh hưởng đến quy trình in tem và vận chuyển.</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { setChangeFulfillmentOpen(false); setPendingFulfillment(null); }}>Huỷ</AlertDialogCancel>
+            <AlertDialogAction onClick={handleChangeFulfillment} className="bg-amber-600 hover:bg-amber-700 text-white">Chuyển đổi</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </TooltipProvider>
   );
 }

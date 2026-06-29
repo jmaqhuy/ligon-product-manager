@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { TopBar } from "@/components/layout/top-bar";
+import { ConfettiCelebration } from "@/components/confetti-celebration";
 
 export default async function DashboardLayout({
   children,
@@ -35,6 +36,7 @@ export default async function DashboardLayout({
         <main className="flex-1 p-4 md:p-6">
           {children}
         </main>
+        <ConfettiCelebration />
       </SidebarInset>
     </SidebarProvider>
   );
