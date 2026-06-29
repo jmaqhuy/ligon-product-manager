@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/button"
+import { ButtonIconHover } from "@/components/shadcn-studio/button/button-04";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetTrigger } from "@/components/ui/sheet";
 import { AuditLogViewer } from "@/components/audit-log-viewer";
-import { GalleryLightbox } from "@/components/gallery-lightbox";
+import { ImagePreviewDialog } from "@/components/image-preview-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -155,7 +156,6 @@ export default function IdeaDetailPage() {
   const [reviewComment, setReviewComment] = useState("");
   const [actionType, setActionType] = useState<"approve" | "reject" | "revise" | null>(null);
   const [photoRevisionInput, setPhotoRevisionInput] = useState("");
-  const [fileRevisionInput, setFileRevisionInput] = useState("");
   const [promptExpanded, setPromptExpanded] = useState(false);
   const [labelPrintQty, setLabelPrintQty] = useState(1);
   const [autoNext, setAutoNext] = useState(true);
@@ -549,15 +549,19 @@ export default function IdeaDetailPage() {
           </Button>
         </div>
         <div className="flex flex-row overflow-x-auto gap-2 pb-2 scrollbar-thin">
-          {cells.map((img, i) => (
-            <div key={i} className="w-16 h-16 shrink-0 bg-muted/40 border border-dashed border-muted-foreground/30 rounded flex items-center justify-center overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all" onClick={() => { if (img) { setLightboxImages(images as string[]); setLightboxIndex(i); setLightboxOpen(true); } }}>
-              {img ? (
-                <img src={driveToThumbnailUrl(img as string, 150)} alt={`Ảnh ${i + 1}`} className="w-full h-full object-cover" />
-              ) : (
+          {cells.map((img, i) =>
+            img ? (
+              <ImagePreviewDialog key={i} images={images as string[]} initialIndex={i}>
+                <div className="w-16 h-16 shrink-0 bg-muted/40 border border-dashed border-muted-foreground/30 rounded flex items-center justify-center overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all">
+                  <img src={driveToThumbnailUrl(img as string, 150)} alt={`Ảnh ${i + 1}`} className="w-full h-full object-cover" />
+                </div>
+              </ImagePreviewDialog>
+            ) : (
+              <div key={i} className="w-16 h-16 shrink-0 bg-muted/40 border border-dashed border-muted-foreground/30 rounded flex items-center justify-center overflow-hidden cursor-not-allowed">
                 <span className="text-[10px] text-muted-foreground text-center px-1">Chưa có ảnh</span>
-              )}
-            </div>
-          ))}
+              </div>
+            )
+          )}
         </div>
 
         <div className="space-y-1.5 mt-2 bg-muted/30 p-2 rounded border border-border/50">
@@ -696,22 +700,11 @@ export default function IdeaDetailPage() {
 
               {/* Action buttons — right side */}
               <div className="flex items-center gap-1 shrink-0">
-                <Tooltip><TooltipTrigger asChild>
-                  <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
-                    <SheetTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><History className="h-4 w-4" /></Button></SheetTrigger>
-                    <SheetContent side="right" className="w-[480px] sm:max-w-[480px]">
-                      <SheetHeader><SheetTitle>Lịch sử thay đổi</SheetTitle><SheetDescription>{idea.msku}</SheetDescription></SheetHeader>
-                      <div className="mt-4 overflow-y-auto max-h-[calc(100vh-10rem)]">
-                        <AuditLogViewer ideaId={id} />
-                      </div>
-                    </SheetContent>
-                  </Sheet>
-                </TooltipTrigger><TooltipContent>Lịch sử</TooltipContent></Tooltip>
-
+                {/* 1. Edit */}
                 <Tooltip><TooltipTrigger asChild>
                   <Sheet open={editOpen} onOpenChange={setEditOpen}>
-                    <SheetTrigger asChild><Button variant="outline" size="icon" className="h-8 w-8" disabled={(idea.amazonListing?.listingStatus === "published" || idea.etsyListing?.listingStatus === "published")}><Pencil className="h-3.5 w-3.5" /></Button></SheetTrigger>
-                    <SheetContent side="right" className="w-[520px] sm:max-w-[520px] p-6">
+                    <SheetTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" disabled={(idea.amazonListing?.listingStatus === "published" || idea.etsyListing?.listingStatus === "published")}><Pencil className="h-3.5 w-3.5" /></Button></SheetTrigger>
+                    <SheetContent side="right" className="w-[520px] sm:max-w-[520px] p-6 z-[100]">
                       <SheetHeader className="mb-4"><SheetTitle>Chỉnh sửa nội dung</SheetTitle><SheetDescription>{idea.msku}</SheetDescription></SheetHeader>
                       <div className="flex-1 overflow-y-auto pr-1">
                         <div className="space-y-5">
@@ -734,14 +727,29 @@ export default function IdeaDetailPage() {
                       </div>
                     </SheetContent>
                   </Sheet>
-                </TooltipTrigger><TooltipContent>Sửa prompt & ảnh</TooltipContent></Tooltip>
+                </TooltipTrigger><TooltipContent sideOffset={5} className="z-[100]">Sửa prompt & ảnh</TooltipContent></Tooltip>
 
+                {/* 2. Make a Copy */}
                 <Tooltip><TooltipTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => router.push(`/ideas/new?cloneFrom=${id}`)} disabled={saving}>
                     <Copy className="h-3.5 w-3.5" />
                   </Button>
-                </TooltipTrigger><TooltipContent>Tạo bản sao</TooltipContent></Tooltip>
+                </TooltipTrigger><TooltipContent sideOffset={5} className="z-[100]">Tạo bản sao</TooltipContent></Tooltip>
 
+                {/* 3. History */}
+                <Tooltip><TooltipTrigger asChild>
+                  <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
+                    <SheetTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><History className="h-4 w-4" /></Button></SheetTrigger>
+                    <SheetContent side="right" className="w-[480px] sm:max-w-[480px] z-[100]">
+                      <SheetHeader><SheetTitle>Lịch sử thay đổi</SheetTitle><SheetDescription>{idea.msku}</SheetDescription></SheetHeader>
+                      <div className="mt-4 overflow-y-auto max-h-[calc(100vh-10rem)]">
+                        <AuditLogViewer ideaId={id} />
+                      </div>
+                    </SheetContent>
+                  </Sheet>
+                </TooltipTrigger><TooltipContent sideOffset={5} className="z-[100]">Lịch sử thay đổi</TooltipContent></Tooltip>
+
+                {/* 4. Delete */}
                 <AlertDialog>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -757,13 +765,13 @@ export default function IdeaDetailPage() {
                         </Button>
                       </span>
                     </TooltipTrigger>
-                    <TooltipContent>{deleteContext.canDelete ? "Xoá ý tưởng" : deleteContext.reason}</TooltipContent>
+                    <TooltipContent sideOffset={5} className="z-[100]">{deleteContext.canDelete ? "Xoá ý tưởng" : deleteContext.reason}</TooltipContent>
                   </Tooltip>
                   {deleteContext.canDelete && (
                     <AlertDialogTrigger className="hidden" id="trigger-delete" />
                   )}
                   {deleteContext.canDelete && (
-                    <AlertDialogContent>
+                    <AlertDialogContent className="z-[100]">
                       <AlertDialogHeader>
                         <AlertDialogTitle className="flex items-center gap-2">
                           {((idea.amazonListing?.listingStatus === "published" || idea.etsyListing?.listingStatus === "published") || idea.productionRequests?.length > 0) && <AlertTriangle className="h-5 w-5 text-red-500" />}
@@ -836,7 +844,7 @@ export default function IdeaDetailPage() {
                         </div>
                       </DialogContent>
                     </Dialog>
-                    
+
                     <div className="flex items-center gap-1.5 ml-1 bg-muted/30 p-1 rounded-md">
                       <div className="flex gap-1">
                         <TooltipProvider><Tooltip>
@@ -854,7 +862,7 @@ export default function IdeaDetailPage() {
                       </div>
                       <div className="flex items-center gap-1.5 px-2 border-l border-border/50 ml-1">
                         <Checkbox id="auto-next-approve" checked={autoNext} onCheckedChange={(v) => setAutoNext(!!v)} />
-                        <Label htmlFor="auto-next-approve" className="text-[10px] text-muted-foreground cursor-pointer leading-tight">Auto<br/>Next</Label>
+                        <Label htmlFor="auto-next-approve" className="text-[10px] text-muted-foreground cursor-pointer leading-tight">Auto<br />Next</Label>
                       </div>
                     </div>
                   </div>
@@ -876,22 +884,7 @@ export default function IdeaDetailPage() {
                 </div>
               )}
 
-              {/* Source Links — domain badges */}
-              {sourceLinks.length > 0 && (
-                <div className="shrink-0 flex items-center gap-1.5 mb-2">
-                  <Link2 className="h-3 w-3 text-blue-500 shrink-0" />
-                  {sourceLinks.map((link: string, i: number) => {
-                    let domain = link;
-                    try { domain = new URL(link).hostname.replace("www.", ""); } catch { }
-                    return (
-                      <a key={i} href={link} target="_blank" rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300">
-                        <ExternalLink className="h-2.5 w-2.5" />{domain}
-                      </a>
-                    );
-                  })}
-                </div>
-              )}
+
 
 
 
@@ -918,55 +911,6 @@ export default function IdeaDetailPage() {
                   {/* ─── Amazon Tab ─── */}
                   <TabsContent value="amazon" className="flex-1 overflow-y-auto mt-2 space-y-3 data-[state=inactive]:hidden pr-1 relative">
                     <fieldset disabled={isNotApproved && !isPartner} className="space-y-3">
-                      {/* Label Print Card */}
-                      {amzForm.fnskuCode && amzForm.fnskuLabelFileUrl && (() => {
-                        const li = convertToDirectImageUrl(amzForm.fnskuLabelFileUrl) || amzForm.fnskuLabelFileUrl;
-                        return <Card className="border-2 border-primary/20 bg-primary/5"><CardContent className="p-3"><div className="flex items-start gap-3">
-                          <Dialog><DialogTrigger asChild><div className="shrink-0 w-16 h-10 rounded border overflow-hidden bg-white cursor-pointer hover:ring-2 hover:ring-primary/50"><img src={li} alt="Label" className="max-w-full max-h-full object-contain" onError={e => { const img = e.target as HTMLImageElement; if (img.src !== amzForm.fnskuLabelFileUrl) img.src = amzForm.fnskuLabelFileUrl; else img.style.display = "none"; }} /></div></DialogTrigger>
-                            <DialogContent className="max-w-[90vw] sm:max-w-[90vw] max-h-[90vh] bg-transparent border-none shadow-none !ring-0 p-0" showCloseButton={false}><img src={li} alt="Label" className="max-w-[90vw] max-h-[90vh] object-contain rounded-md" /></DialogContent></Dialog>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2"><Printer className="h-4 w-4 text-primary" /><span className="font-semibold text-sm">In Label</span><Badge variant="outline" className="text-[10px]">5×3cm</Badge></div>
-                            <p className="text-xs text-muted-foreground">FNSKU: <span className="font-mono font-medium">{amzForm.fnskuCode}</span></p>
-                            <div className="flex items-center gap-2 mt-2">
-                              <Label className="text-[10px] shrink-0">Số lượng:</Label>
-                              <Input
-                                type="number"
-                                min={1}
-                                max={99}
-                                className="w-14 h-7 text-center text-xs"
-                                value={labelPrintQty}
-                                onChange={(e) => setLabelPrintQty(Math.max(1, parseInt(e.target.value) || 1))}
-                              />
-                              <Button
-                                size="sm"
-                                className="h-7 text-xs gap-1"
-                                onClick={() => {
-                                  const w = window.open("", "_blank", "width=600,height=400");
-                                  if (w) {
-                                    const imgs = Array(labelPrintQty).fill(`<img src="${li}" alt="Label" onerror="this.remove()">`).join("");
-                                    w.document.write('<!DOCTYPE html><html><head><title>Label</title>' +
-                                      '<style>' +
-                                      '@page{size:5cm 3cm;margin:0}' +
-                                      '@media print{html,body{margin:0;padding:0}img{page-break-after:always}}' +
-                                      'body{margin:0;padding:0;background:#fff;display:flex;flex-direction:column;align-items:center}' +
-                                      'img{display:block;width:5cm;height:3cm;object-fit:contain}' +
-                                      '</style></head><body>' + imgs + '<script>' +
-                                      'var all=document.querySelectorAll("img"),n=all.length,ok=0;' +
-                                      'if(n===0){window.print();window.close()}' +
-                                      'all.forEach(function(img){img.onload=function(){ok++;if(ok===n)setTimeout(function(){window.print();window.close()},300)};' +
-                                      'img.onerror=function(){img.remove();ok++;if(ok===n)setTimeout(function(){window.print();window.close()},300)}});' +
-                                      '<' + '/script></body></html>');
-                                    w.document.close();
-                                  }
-                                }}
-                              >
-                                <Printer className="h-3 w-3" /> In {labelPrintQty} label
-                              </Button>
-                            </div>
-                          </div>
-                        </div></CardContent></Card>;
-                      })()}
-
                       {/* FBA/FBM — belongs to Amazon */}
 
                       {/* Amazon Listing Card */}
@@ -998,310 +942,265 @@ export default function IdeaDetailPage() {
                                 Chuyển sang {idea.amazonListing?.fulfillmentType === "FBA" ? "FBM" : "FBA"}?
                               </Button>
                             )}
+                            <div className="mx-2 h-4 w-px bg-border"></div>
+                            <div className="flex items-center gap-1.5 ml-1">
+                              {statusBadge(idea.amazonListing?.listingStatus || "ready", listingStatusLabels)}
+                              {(NEXT_STATUS[idea.amazonListing?.listingStatus || "ready"] || []).map(opt => (
+                                <Button key={opt.next} size="sm" className={`h-6 px-2 text-[10px] text-white ${opt.className}`}
+                                  onClick={() => handleListingStatusChange("amazon", opt.next)} disabled={saving}>{opt.label}</Button>
+                              ))}
+                            </div>
                           </CardTitle>
-                          <Dialog open={changeFulfillmentOpen} onOpenChange={setChangeFulfillmentOpen}>
-                            <DialogContent>
-                              <DialogHeader><DialogTitle>Xác nhận đổi loại Fulfillment</DialogTitle></DialogHeader>
-                              <p className="text-sm">Bạn sắp đổi loại fulfillment thành <strong>{pendingFulfillment}</strong>. Hành động này có thể ảnh hưởng đến quá trình xử lý tiếp theo.</p>
-                              <div className="flex justify-end gap-2 mt-4">
-                                <Button variant="ghost" onClick={() => setChangeFulfillmentOpen(false)}>Huỷ</Button>
-                                <Button onClick={handleChangeFulfillment} disabled={saving}>Xác nhận</Button>
-                              </div>
-                            </DialogContent>
-                          </Dialog>
-                          <div className="flex items-center gap-1">
-                            {idea.amazonListing && (() => { try { const g = typeof idea.amazonListing.galleryImages === "string" ? JSON.parse(idea.amazonListing.galleryImages) : (idea.amazonListing.galleryImages || []); if (g.filter(Boolean).length > 0) return <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { g.filter(Boolean).forEach((url: string) => window.open(convertToDirectImageUrl(url) || url, "_blank")); }}><Download className="h-3 w-3 mr-1" /> Tải {g.filter(Boolean).length} ảnh</Button>; } catch { } return null; })()}
-                            <Sheet open={amzEditOpen} onOpenChange={setAmzEditOpen}>
-                              <SheetTrigger asChild><Button variant="ghost" size="sm" className="h-7 text-xs" disabled={(idea.amazonListing?.listingStatus === "published" || idea.etsyListing?.listingStatus === "published")}><Pencil className="h-3 w-3 mr-1" /> Sửa</Button></SheetTrigger>
-                              <SheetContent side="right" className="w-[min(92vw,1000px)] sm:max-w-[1000px] p-6 flex flex-col">
-                                <SheetHeader className="shrink-0"><SheetTitle>Sửa Amazon Listing</SheetTitle><SheetDescription>{idea.msku}</SheetDescription></SheetHeader>
-                                <div className="flex-1 overflow-y-auto mt-4 pr-1">
-                                  <div className="space-y-3">
-                                    <div className="grid grid-cols-2 gap-3">
-                                      <div className="space-y-1"><Label className="text-xs">Tài khoản</Label>
-                                        <Select value={amzForm.sellingAccountId} onValueChange={v => setAmzForm({ ...amzForm, sellingAccountId: v })}><SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Chọn..." /></SelectTrigger>
-                                          <SelectContent>{sellingAccounts.filter((a: any) => a.platform === "amazon" && a.status === "active").map((a: any) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}</SelectContent></Select>
-                                      </div>
-                                      <div className="space-y-1"><Label className="text-xs">Giá ($)</Label><Input className="h-8 text-xs" type="number" value={amzForm.price} onChange={e => setAmzForm({ ...amzForm, price: e.target.value })} /></div>
-                                    </div>
-                                    {(amzForm.listingStatus === "error" || amzForm.listingStatus === "delisted") && (
-                                      <div className="space-y-1"><Label className="text-xs">Lý do {amzForm.listingStatus === "error" ? "lỗi" : "bị gỡ"}</Label><Input className="h-8 text-xs" value={amzForm.listingStatusReason} onChange={e => setAmzForm({ ...amzForm, listingStatusReason: e.target.value })} placeholder={amzForm.listingStatus === "error" ? "Mô tả lỗi..." : "Lý do sàn gỡ..."} /></div>
-                                    )}
-                                    {idea.fulfillmentType === "FBA" && (<>
-                                      <div className="grid grid-cols-2 gap-3">
-                                        <div className="space-y-1"><Label className="text-xs">Vine Program</Label>
-                                          <Select value={amzForm.vineStatus || "not_enrolled"} onValueChange={v => setAmzForm({ ...amzForm, vineStatus: v })}><SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                                            <SelectContent><SelectItem value="not_enrolled">Chưa tham gia</SelectItem><SelectItem value="enrolled">Đã đăng ký</SelectItem><SelectItem value="reviewing">Đang đánh giá</SelectItem><SelectItem value="completed">Hoàn thành</SelectItem></SelectContent></Select>
-                                        </div>
-                                        {amzForm.vineStatus && amzForm.vineStatus !== "not_enrolled" && <div className="space-y-1"><Label className="text-xs">Link Vine Review</Label><Input className="h-8 text-xs" value={amzForm.vineReviewUrl} onChange={e => setAmzForm({ ...amzForm, vineReviewUrl: e.target.value })} placeholder="https://..." /></div>}
-                                      </div>
-                                    </>)}
-                                    <div className="space-y-1"><Label className="text-xs">Trạng thái ảnh</Label>
-                                      <Select value={amzForm.photosUploaded ? "uploaded" : "temp"} onValueChange={v => setAmzForm({ ...amzForm, photosUploaded: v === "uploaded" })}><SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                                        <SelectContent><SelectItem value="temp">Đang dùng ảnh tạm</SelectItem><SelectItem value="uploaded">Đã up ảnh thật</SelectItem></SelectContent></Select>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-3">
-                                      <div className="space-y-1"><Label className="text-xs">ASIN</Label><Input className="h-8 text-xs" value={amzForm.asin} onChange={e => setAmzForm({ ...amzForm, asin: e.target.value })} /></div>
-                                      <div className="space-y-1"><Label className="text-xs">FNSKU</Label><Input className="h-8 text-xs" value={amzForm.fnskuCode} onChange={e => setAmzForm({ ...amzForm, fnskuCode: e.target.value })} /></div>
-                                    </div>
-                                    <div className="space-y-1"><Label className="text-xs">FNSKU Label URL</Label><Input className="h-8 text-xs" value={amzForm.fnskuLabelFileUrl} onChange={e => setAmzForm({ ...amzForm, fnskuLabelFileUrl: e.target.value })} /></div>
-                                    <div className="space-y-1"><Label className="text-xs">Item Name (≤75)</Label><Input className="h-8 text-xs" value={amzForm.itemName} onChange={e => setAmzForm({ ...amzForm, itemName: e.target.value })} /></div>
-                                    <div className="space-y-1"><Label className="text-xs">Item Highlights (≤125)</Label><Input className="h-8 text-xs" value={amzForm.itemHighlights} onChange={e => setAmzForm({ ...amzForm, itemHighlights: e.target.value })} /></div>
-                                    <div className="space-y-1"><Label className="text-xs">Bullet Points</Label>
-                                      {amzForm.bulletPoints.map((bp, i) => <Input key={i} className="h-7 text-xs mb-1" value={bp} onChange={e => { const n = [...amzForm.bulletPoints]; n[i] = e.target.value; setAmzForm({ ...amzForm, bulletPoints: n }); }} placeholder={`Bullet ${i + 1}`} />)}
-                                    </div>
-                                    <div className="space-y-1"><Label className="text-xs">Mô tả</Label><Textarea className="text-xs resize-none" rows={3} value={amzForm.description} onChange={e => setAmzForm({ ...amzForm, description: e.target.value })} /></div>
-                                    <div className="grid grid-cols-2 gap-3">
-                                      <div className="space-y-1"><Label className="text-xs">Tags (cách nhau ;)</Label><Input className="h-8 text-xs" value={amzForm.tags} onChange={e => setAmzForm({ ...amzForm, tags: e.target.value })} /></div>
-                                      <div className="space-y-1"><Label className="text-xs">Status</Label>
-                                        <Select value={amzForm.listingStatus} onValueChange={v => setAmzForm({ ...amzForm, listingStatus: v })}><SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                                          <SelectContent>{Object.entries(listingStatusLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select>
-                                      </div>
-                                    </div>
-                                    <div className="space-y-1"><Label className="text-xs">Slugs (mỗi dòng 1)</Label><Textarea className="text-xs resize-none" rows={2} value={amzForm.slugs} onChange={e => setAmzForm({ ...amzForm, slugs: e.target.value })} /></div>
-                                    <div className="grid grid-cols-2 gap-3">
-                                      <div className="space-y-1"><Label className="text-xs">Video URL</Label><Input className="h-8 text-xs" value={amzForm.videoUrl} onChange={e => setAmzForm({ ...amzForm, videoUrl: e.target.value })} /></div>
-                                      <div className="space-y-1"><Label className="text-xs">Content A+ URL</Label><Input className="h-8 text-xs" value={amzForm.contentAPlusUrl} onChange={e => setAmzForm({ ...amzForm, contentAPlusUrl: e.target.value })} /></div>
-                                    </div>
-                                    <div className="space-y-1"><Label className="text-xs">Gallery ({amzForm.galleryImages.filter(Boolean).length} ảnh)</Label>
-                                      <div className="flex items-center gap-2 mb-1">
-                                        <Checkbox id="amz-shared-main" checked={amzForm.useSharedMainImage} onCheckedChange={v => setAmzForm({ ...amzForm, useSharedMainImage: !!v })} />
-                                        <Label htmlFor="amz-shared-main" className="text-[10px] cursor-pointer">Dùng ảnh main chung</Label>
-                                      </div>
-                                      {amzForm.galleryImages.map((url, i) => <div key={i} className="flex gap-1"><Input className="h-7 text-xs flex-1" value={url} onChange={e => { const n = [...amzForm.galleryImages]; n[i] = e.target.value; setAmzForm({ ...amzForm, galleryImages: n }); }} placeholder={`Ảnh ${i + 1}`} /><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setAmzForm({ ...amzForm, galleryImages: amzForm.galleryImages.filter((_, j) => j !== i) })}><X className="h-3 w-3" /></Button></div>)}
-                                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setAmzForm({ ...amzForm, galleryImages: [...amzForm.galleryImages, ""] })}>+ Thêm ảnh</Button>
-                                    </div>
-                                    <div className="flex justify-end gap-2 pt-2 pb-4">
-                                      <Button variant="outline" size="sm" onClick={() => { setAmzEditOpen(false); fetchIdea(); }}>Huỷ</Button>
-                                      <Button size="sm" onClick={handleSaveAmazon} disabled={saving}>{saving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : null}Lưu</Button>
-                                    </div>
-                                  </div>
-                                </div>
-                              </SheetContent>
-                            </Sheet>
+                          <div className="flex items-center gap-2">
+                            {role !== "employee" && <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => { setAmzForm(idea.amazonListing || { ideaId: id, listingStatus: "ready", fulfillmentType: idea.fulfillmentType || "FBA" }); setAmzEditOpen(true); }}><Edit3 className="h-3.5 w-3.5 mr-1.5" /> Sửa</Button>}
                           </div>
                         </CardHeader>
-                        <CardContent className="text-sm space-y-4 pt-2">
-                          {/* ─── INFORMATION SECTION ─── */}
-                          <div className="space-y-2">
-                            <button
-                              onClick={() => setAmzInfoExpanded(!amzInfoExpanded)}
-                              className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors w-full text-left"
-                            >
-                              <span className="flex-1">Information</span>
-                              {amzInfoExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                            </button>
+                        <CardContent className="text-sm pt-2">
+                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-                            {amzInfoExpanded && (
-                              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-                                <div className="group/acc rounded-md bg-muted/40 px-2.5 py-1.5 border border-transparent hover:border-border/50 transition-colors">
-                                  <span className="text-[10px] text-muted-foreground block">Selling Account</span>
-                                  <div className="flex items-center justify-between mt-0.5">
-                                    <span className="text-xs font-medium">
-                                      {sellingAccounts.find(a => a.id === idea.amazonListing?.sellingAccountId)?.name || "—"}
-                                    </span>
+                            {/* ─── LEFT COLUMN: INFORMATION & GALLERY & PREMIUM CONTENT ─── */}
+                            <div className="space-y-6">
+                              {/* INFORMATION */}
+                              <div className="space-y-3">
+                                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Information</span>
+
+                                <div className="space-y-2">
+                                  {/* Row 1: Selling Account & Price */}
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div className="group/acc flex flex-col justify-center rounded-md bg-muted/40 px-2.5 py-1.5 border border-transparent hover:border-border/50 transition-colors">
+                                      <span className="text-[10px] text-muted-foreground block mb-0.5">Selling Account</span>
+                                      <span className="text-xs font-medium line-clamp-1">
+                                        {sellingAccounts.find(a => a.id === idea.amazonListing?.sellingAccountId)?.name || "—"}
+                                      </span>
+                                    </div>
+                                    <div className="group/price flex flex-col justify-center rounded-md bg-muted/40 px-2.5 py-1.5 border border-transparent hover:border-border/50 transition-colors">
+                                      <span className="text-[10px] text-muted-foreground block mb-0.5">Price</span>
+                                      <span className="text-xs font-medium">${idea.amazonListing?.price || "—"}</span>
+                                    </div>
                                   </div>
-                                </div>
-                                <div className="group/sku flex flex-col justify-center rounded-md bg-muted/40 px-2.5 py-1.5 border border-transparent hover:border-border/50 transition-colors">
-                                  <span className="text-[10px] text-muted-foreground block">SKU</span>
-                                  <div className="flex items-center justify-between mt-0.5">
-                                    <span className="text-xs font-mono font-medium">{idea.amazonListing?.sku || idea.sku || "—"}</span>
-                                    {(idea.amazonListing?.sku || idea.sku) && <CopyButton text={idea.amazonListing?.sku || idea.sku} className="h-4 w-4 opacity-0 group-hover/sku:opacity-100 transition-opacity" />}
+
+                                  {/* Row 2: SKU & ASIN */}
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div className="group/sku flex flex-col justify-center rounded-md bg-muted/40 px-2.5 py-1.5 border border-transparent hover:border-border/50 transition-colors">
+                                      <span className="text-[10px] text-muted-foreground block mb-0.5">SKU</span>
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-xs font-mono font-medium truncate">{idea.amazonListing?.sku || idea.sku || "—"}</span>
+                                        {(idea.amazonListing?.sku || idea.sku) && <CopyButton text={idea.amazonListing?.sku || idea.sku} className="shrink-0 h-4 w-4 opacity-0 group-hover/sku:opacity-100 transition-opacity" />}
+                                      </div>
+                                    </div>
+                                    <div className="group/asin flex flex-col justify-center rounded-md bg-muted/40 px-2.5 py-1.5 border border-transparent hover:border-border/50 transition-colors">
+                                      <span className="text-[10px] text-muted-foreground block mb-0.5">ASIN</span>
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-xs font-mono font-medium truncate">{idea.amazonListing?.asin || "—"}</span>
+                                        {idea.amazonListing?.asin && (
+                                          <div className="flex items-center gap-1 opacity-0 group-hover/asin:opacity-100 transition-opacity">
+                                            <a href={`https://www.amazon.com/dp/${idea.amazonListing.asin}`} target="_blank" rel="noopener noreferrer" className="h-4 w-4 flex items-center justify-center text-blue-600 hover:bg-blue-50 rounded"><ExternalLink className="h-3 w-3" /></a>
+                                            <CopyButton text={idea.amazonListing.asin} className="h-4 w-4" />
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
                                   </div>
-                                </div>
-                                <div className="group/asin flex flex-col justify-center rounded-md bg-muted/40 px-2.5 py-1.5 border border-transparent hover:border-border/50 transition-colors">
-                                  <span className="text-[10px] text-muted-foreground block">ASIN</span>
-                                  <div className="flex items-center justify-between mt-0.5">
-                                    <span className="text-xs font-mono font-medium">{idea.amazonListing?.asin || "—"}</span>
-                                    {idea.amazonListing?.asin && (
-                                      <div className="flex items-center gap-1 opacity-0 group-hover/asin:opacity-100 transition-opacity">
-                                        <a href={`https://www.amazon.com/dp/${idea.amazonListing.asin}`} target="_blank" rel="noopener noreferrer" className="h-4 w-4 flex items-center justify-center text-blue-600 hover:bg-blue-50 rounded"><ExternalLink className="h-3 w-3" /></a>
-                                        <CopyButton text={idea.amazonListing.asin} className="h-4 w-4" />
+
+                                  {/* Row 3: FNSKU & Print Label combined */}
+                                  <div className="group/fnsku flex items-center justify-between rounded-md bg-muted/40 p-2 border border-transparent hover:border-border/50 transition-colors">
+                                    <div className="flex items-center gap-3">
+                                      {/* Thumbnail */}
+                                      {idea.amazonListing?.fnskuLabelFileUrl ? (
+                                        <Dialog>
+                                          <DialogTrigger asChild>
+                                            <div className="shrink-0 w-12 h-8 rounded border bg-white cursor-pointer hover:ring-2 hover:ring-primary/50 overflow-hidden">
+                                              <img src={convertToDirectImageUrl(idea.amazonListing.fnskuLabelFileUrl) || idea.amazonListing.fnskuLabelFileUrl} alt="Label" className="w-full h-full object-contain" />
+                                            </div>
+                                          </DialogTrigger>
+                                          <DialogContent className="max-w-[90vw] sm:max-w-[90vw] max-h-[90vh] bg-transparent border-none shadow-none !ring-0 p-0" showCloseButton={false}>
+                                            <img src={convertToDirectImageUrl(idea.amazonListing.fnskuLabelFileUrl) || idea.amazonListing.fnskuLabelFileUrl} alt="Label" className="max-w-[90vw] max-h-[90vh] object-contain rounded-md" />
+                                          </DialogContent>
+                                        </Dialog>
+                                      ) : (
+                                        <div className="shrink-0 w-12 h-8 rounded border bg-muted/50 flex items-center justify-center">
+                                          <span className="text-[8px] text-muted-foreground">No Label</span>
+                                        </div>
+                                      )}
+
+                                      <div className="flex flex-col">
+                                        <span className="text-[10px] text-muted-foreground">FNSKU</span>
+                                        <div className="flex items-center gap-1">
+                                          <span className="text-xs font-mono font-medium">{idea.amazonListing?.fnskuCode || "—"}</span>
+                                          {idea.amazonListing?.fnskuCode && <CopyButton text={idea.amazonListing.fnskuCode} className="h-3 w-3 opacity-0 group-hover/fnsku:opacity-100 transition-opacity" />}
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Print Controls */}
+                                    {idea.amazonListing?.fnskuCode && idea.amazonListing?.fnskuLabelFileUrl && (
+                                      <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-1">
+                                          <Label className="text-[10px] text-muted-foreground shrink-0">SL:</Label>
+                                          <Input
+                                            type="number" min={1} max={99}
+                                            className="w-12 h-7 text-xs text-center px-1"
+                                            value={labelPrintQty}
+                                            onChange={(e) => setLabelPrintQty(Math.max(1, parseInt(e.target.value) || 1))}
+                                          />
+                                        </div>
+                                        <Button size="sm" className="h-7 text-xs gap-1" onClick={() => {
+                                          const li = convertToDirectImageUrl(idea.amazonListing?.fnskuLabelFileUrl || "") || idea.amazonListing?.fnskuLabelFileUrl;
+                                          const w = window.open("", "_blank", "width=600,height=400");
+                                          if (w) {
+                                            const imgs = Array(labelPrintQty).fill(`<img src="${li}" alt="Label" onerror="this.remove()">`).join("");
+                                            w.document.write('<!DOCTYPE html><html><head><title>Label</title>' +
+                                              '<style>' +
+                                              '@page{size:5cm 3cm;margin:0}' +
+                                              '@media print{html,body{margin:0;padding:0}img{page-break-after:always}}' +
+                                              'body{margin:0;padding:0;background:#fff;display:flex;flex-direction:column;align-items:center}' +
+                                              'img{display:block;width:5cm;height:3cm;object-fit:contain}' +
+                                              '</style></head><body>' + imgs + '<script>' +
+                                              'var all=document.querySelectorAll("img"),n=all.length,ok=0;' +
+                                              'if(n===0){window.print();window.close()}' +
+                                              'all.forEach(function(img){img.onload=function(){ok++;if(ok===n)setTimeout(function(){window.print();window.close()},300)};' +
+                                              'img.onerror=function(){img.remove();ok++;if(ok===n)setTimeout(function(){window.print();window.close()},300)}});' +
+                                              '<' + '/script></body></html>');
+                                            w.document.close();
+                                          }
+                                        }}>
+                                          <Printer className="h-3 w-3" /> In
+                                        </Button>
                                       </div>
                                     )}
                                   </div>
-                                </div>
-                                <div className="group/fnsku flex flex-col justify-center rounded-md bg-muted/40 px-2.5 py-1.5 border border-transparent hover:border-border/50 transition-colors">
-                                  <span className="text-[10px] text-muted-foreground block">FNSKU</span>
-                                  <div className="flex items-center justify-between mt-0.5">
-                                    <span className="text-xs font-mono font-medium">{idea.amazonListing?.fnskuCode || "—"}</span>
-                                    {idea.amazonListing?.fnskuCode && <CopyButton text={idea.amazonListing.fnskuCode} className="h-4 w-4 opacity-0 group-hover/fnsku:opacity-100 transition-opacity" />}
-                                  </div>
-                                </div>
-                                <div className="group/price flex flex-col justify-center rounded-md bg-muted/40 px-2.5 py-1.5 border border-transparent hover:border-border/50 transition-colors">
-                                  <span className="text-[10px] text-muted-foreground block">Price</span>
-                                  <div className="flex items-center justify-between mt-0.5">
-                                    <span className="text-xs font-medium">${idea.amazonListing?.price || "—"}</span>
-                                  </div>
-                                </div>
-                                <div className="flex flex-col justify-center rounded-md bg-muted/40 px-2.5 py-1.5 border border-transparent hover:border-border/50 transition-colors">
-                                  <span className="text-[10px] text-muted-foreground block">Status</span>
-                                  <div className="flex items-center gap-1.5 mt-0.5">
-                                    {statusBadge(idea.amazonListing?.listingStatus || "ready", listingStatusLabels)}
-                                    {(NEXT_STATUS[idea.amazonListing?.listingStatus || "ready"] || []).map(opt => (
-                                      <Button key={opt.next} size="sm" className={`h-5 px-1.5 text-[9px] text-white ${opt.className}`}
-                                        onClick={() => handleListingStatusChange("amazon", opt.next)} disabled={saving}>{opt.label}</Button>
-                                    ))}
-                                  </div>
+
                                 </div>
                               </div>
-                            )}
-                            {(idea.amazonListing?.listingStatus === "error" || idea.amazonListing?.listingStatus === "delisted") && idea.amazonListing?.listingStatusReason && (
-                              <div className="rounded-md bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 px-2.5 py-1.5 mt-2">
-                                <span className="text-[10px] text-red-600 dark:text-red-400 font-medium">Lý do {idea.amazonListing.listingStatus === "error" ? "lỗi" : "bị gỡ"}:</span>
-                                <p className="text-xs text-red-700 dark:text-red-300 mt-0.5">{idea.amazonListing.listingStatusReason}</p>
+
+                              <Separator />
+
+                              {/* GALLERY */}
+                              <div className="pb-2">
+                                {renderPhotoGallery("amazon", idea.amazonListing, amzForm, setAmzEditOpen, async (data) => {
+                                  try {
+                                    setSaving(true);
+                                    const res = await fetch(`/api/ideas/${id}/amazon-listing`, { method: "PUT", body: JSON.stringify(data) });
+                                    if (!res.ok) throw new Error("Lỗi");
+                                    await fetchIdea();
+                                  } catch (err) { toast.error("Lỗi cập nhật ảnh Amazon"); }
+                                  finally { setSaving(false); }
+                                })}
                               </div>
-                            )}
-                          </div>
 
-                          <Separator className="my-2" />
+                              <Separator />
 
-                          {/* ─── CONTENT SECTION ─── */}
-                          <div className="space-y-3">
-                            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Content</span>
-
-                            <div className="group/iname flex flex-col justify-center rounded-md bg-muted/40 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative">
-                              <span className="text-[10px] text-muted-foreground block mb-0.5">Title (Item Name)</span>
-                              <span className="text-sm font-medium pr-6">{idea.amazonListing?.itemName || "—"}</span>
-                              {idea.amazonListing?.itemName && <CopyButton text={idea.amazonListing.itemName} className="absolute right-2 top-2 h-5 w-5 opacity-0 group-hover/iname:opacity-100 transition-opacity" />}
-                            </div>
-
-                            <div className="group/ihigh flex flex-col justify-center rounded-md bg-muted/40 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative">
-                              <span className="text-[10px] text-muted-foreground block mb-0.5">Item Highlights</span>
-                              <span className="text-xs pr-6">{idea.amazonListing?.itemHighlights || "—"}</span>
-                              {idea.amazonListing?.itemHighlights && <CopyButton text={idea.amazonListing.itemHighlights} className="absolute right-2 top-2 h-5 w-5 opacity-0 group-hover/ihigh:opacity-100 transition-opacity" />}
-                            </div>
-
-                            <div className="group/idesc rounded-md bg-muted/40 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative">
-                              <span className="text-[10px] text-muted-foreground block mb-1">Description</span>
-                              <div className="text-xs whitespace-pre-wrap line-clamp-3 text-muted-foreground pr-6">
-                                {idea.amazonListing?.description || "—"}
-                              </div>
-                              {idea.amazonListing?.description && idea.amazonListing.description.length > 150 && (
-                                <Dialog>
-                                  <DialogTrigger asChild><Button variant="link" className="h-auto p-0 text-[10px] mt-1">Xem toàn bộ</Button></DialogTrigger>
-                                  <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-                                    <DialogHeader><DialogTitle>Description</DialogTitle></DialogHeader>
-                                    <div className="text-sm whitespace-pre-wrap relative group/full mt-2">
-                                      {idea.amazonListing.description}
-                                      <CopyButton text={idea.amazonListing.description} className="absolute top-0 right-0 opacity-0 group-hover/full:opacity-100 transition-opacity" />
+                              {/* PREMIUM CONTENT */}
+                              <div className="space-y-3 pb-2">
+                                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Premium Content</span>
+                                <div className="space-y-2">
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div className="group/video rounded-md bg-muted/40 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative flex flex-col justify-center">
+                                      <span className="text-[10px] text-muted-foreground block mb-1">Video</span>
+                                      {idea.amazonListing?.videoUrl ? (
+                                        <a href={idea.amazonListing.videoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline line-clamp-1 break-all"><ExternalLink className="h-3 w-3 shrink-0" /> <span className="truncate">{idea.amazonListing.videoUrl}</span></a>
+                                      ) : <p className="text-xs text-muted-foreground">—</p>}
+                                      {idea.amazonListing?.videoUrl && <CopyButton text={idea.amazonListing.videoUrl} className="absolute right-2 top-2 h-5 w-5 opacity-0 group-hover/video:opacity-100 transition-opacity bg-background" />}
                                     </div>
-                                  </DialogContent>
-                                </Dialog>
-                              )}
-                              {idea.amazonListing?.description && <CopyButton text={idea.amazonListing.description} className="absolute right-2 top-2 h-5 w-5 opacity-0 group-hover/idesc:opacity-100 transition-opacity" />}
+
+                                    <div className="group/aplus rounded-md bg-muted/40 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative flex flex-col justify-center">
+                                      <span className="text-[10px] text-muted-foreground block mb-1">Content A+</span>
+                                      {idea.amazonListing?.contentAPlusUrl ? (
+                                        <a href={idea.amazonListing.contentAPlusUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline line-clamp-1 break-all"><ExternalLink className="h-3 w-3 shrink-0" /> <span className="truncate">{idea.amazonListing.contentAPlusUrl}</span></a>
+                                      ) : <p className="text-xs text-muted-foreground">—</p>}
+                                      {idea.amazonListing?.contentAPlusUrl && <CopyButton text={idea.amazonListing.contentAPlusUrl} className="absolute right-2 top-2 h-5 w-5 opacity-0 group-hover/aplus:opacity-100 transition-opacity bg-background" />}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
                             </div>
 
-                            <div className="group/ibullet rounded-md bg-muted/40 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative">
-                              <span className="text-[10px] text-muted-foreground block mb-1">Bullet Points</span>
-                              {(() => {
-                                try {
-                                  const bps = JSON.parse(idea.amazonListing?.bulletPoints || "[]").filter(Boolean);
-                                  if (bps.length === 0) return <p className="text-xs text-muted-foreground">—</p>;
-                                  return (
-                                    <>
-                                      <ul className="text-xs space-y-1 list-disc list-inside line-clamp-3 pr-6">
-                                        {bps.map((bp: string, i: number) => <li key={i}>{bp}</li>)}
-                                      </ul>
-                                      <Dialog>
-                                        <DialogTrigger asChild><Button variant="link" className="h-auto p-0 text-[10px] mt-1">Xem toàn bộ</Button></DialogTrigger>
-                                        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-                                          <DialogHeader><DialogTitle>Bullet Points</DialogTitle></DialogHeader>
-                                          <div className="text-sm space-y-2 relative group/full mt-2">
-                                            <ul className="list-disc list-inside space-y-2">
-                                              {bps.map((bp: string, i: number) => <li key={i}>{bp}</li>)}
-                                            </ul>
-                                            <CopyButton text={bps.join("\n")} className="absolute top-0 right-0 opacity-0 group-hover/full:opacity-100 transition-opacity" />
+                            {/* ─── RIGHT COLUMN: CONTENT ─── */}
+                            <div className="space-y-3 lg:col-span-2">
+                              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Content</span>
+
+                              <div className="group/iname flex flex-col justify-center rounded-md bg-muted/40 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative">
+                                <div className="flex items-center gap-2 mb-1"><span className="text-[10px] text-muted-foreground block">Title (Item Name)</span><Badge variant="outline" className="text-[9px] font-mono font-medium h-4 px-1.5 border-primary/20 bg-primary/5 text-primary/70">75 ký tự max</Badge></div>
+                                <span className="text-sm font-medium pr-6">{idea.amazonListing?.itemName || "—"}</span>
+                                {idea.amazonListing?.itemName && <CopyButton text={idea.amazonListing.itemName} className="absolute right-2 top-2 h-5 w-5 opacity-0 group-hover/iname:opacity-100 transition-opacity bg-background" />}
+                              </div>
+
+                              <div className="group/ihigh flex flex-col justify-center rounded-md bg-muted/40 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative">
+                                <div className="flex items-center gap-2 mb-1"><span className="text-[10px] text-muted-foreground block">Item Highlights</span><Badge variant="outline" className="text-[9px] font-mono font-medium h-4 px-1.5 border-primary/20 bg-primary/5 text-primary/70">125 ký tự max</Badge></div>
+                                <span className="text-xs pr-6">{idea.amazonListing?.itemHighlights || "—"}</span>
+                                {idea.amazonListing?.itemHighlights && <CopyButton text={idea.amazonListing.itemHighlights} className="absolute right-2 top-2 h-5 w-5 opacity-0 group-hover/ihigh:opacity-100 transition-opacity bg-background" />}
+                              </div>
+
+                              <div className="group/idesc flex flex-col rounded-md bg-muted/40 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative">
+                                <div className="flex items-center gap-2 mb-1.5"><span className="text-[10px] text-muted-foreground block">Description</span><Badge variant="outline" className="text-[9px] font-mono font-medium h-4 px-1.5 border-primary/20 bg-primary/5 text-primary/70">500 - 2000 ký tự</Badge></div>
+                                <div className="text-xs whitespace-pre-wrap text-muted-foreground pr-6 max-h-32 overflow-y-auto custom-scrollbar">
+                                  {idea.amazonListing?.description || "—"}
+                                </div>
+                                {idea.amazonListing?.description && <CopyButton text={idea.amazonListing.description} className="absolute right-2 top-2 h-5 w-5 opacity-0 group-hover/idesc:opacity-100 transition-opacity bg-background" />}
+                              </div>
+
+                              <div className="space-y-1.5">
+                                <div className="flex items-center gap-2 px-1"><span className="text-[10px] text-muted-foreground block">Bullet Points</span><Badge variant="outline" className="text-[9px] font-mono font-medium h-4 px-1.5 border-primary/20 bg-primary/5 text-primary/70">5 bullets, 255 ký tự max/bullet</Badge></div>
+                                {(() => {
+                                  try {
+                                    const bps = JSON.parse(idea.amazonListing?.bulletPoints || "[]").filter(Boolean);
+                                    if (bps.length === 0) return <p className="text-xs text-muted-foreground px-1">—</p>;
+                                    return (
+                                      <div className="space-y-1.5">
+                                        {bps.map((bp: string, i: number) => (
+                                          <div key={i} className="group/bp rounded-md bg-muted/30 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative flex items-start gap-2">
+                                            <span className="text-[10px] font-bold text-muted-foreground/50 mt-0.5 select-none w-3 shrink-0">{i + 1}.</span>
+                                            <p className="text-xs pr-6 leading-relaxed">{bp}</p>
+                                            <CopyButton text={bp} className="absolute right-2 top-2 h-5 w-5 opacity-0 group-hover/bp:opacity-100 transition-opacity bg-background" />
                                           </div>
-                                        </DialogContent>
-                                      </Dialog>
-                                      <CopyButton text={bps.join("\n")} className="absolute right-2 top-2 h-5 w-5 opacity-0 group-hover/ibullet:opacity-100 transition-opacity" />
-                                    </>
-                                  );
-                                } catch { return <p className="text-xs text-muted-foreground">—</p>; }
-                              })()}
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-3">
-                              <div className="group/itags rounded-md bg-muted/40 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative">
-                                <span className="text-[10px] text-muted-foreground block mb-1">Tags</span>
-                                {(() => {
-                                  const tags = (idea.amazonListing?.tags || "").split(";").filter(Boolean);
-                                  if (tags.length === 0) return <p className="text-xs text-muted-foreground">—</p>;
-                                  return (
-                                    <div className="flex flex-wrap gap-1 pr-6">
-                                      {tags.map((t: string, i: number) =>
-                                        <Badge key={i} variant="secondary" className="text-[10px] font-normal group/tag relative pr-5">
-                                          {t.trim()}
-                                          <a href={`https://www.amazon.com/s?k=${encodeURIComponent(t.trim())}`} target="_blank" rel="noopener noreferrer" className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/tag:opacity-100 hover:text-blue-500 transition-opacity"><ExternalLink className="h-2.5 w-2.5" /></a>
-                                        </Badge>
-                                      )}
-                                      <CopyButton text={idea.amazonListing?.tags || ""} className="absolute right-2 top-2 h-5 w-5 opacity-0 group-hover/itags:opacity-100 transition-opacity" />
-                                    </div>
-                                  );
+                                        ))}
+                                        <div className="flex justify-end pt-1">
+                                          <Button variant="outline" size="sm" className="h-6 text-[10px] px-2 py-1" onClick={() => { navigator.clipboard.writeText(bps.join("\n")); toast.success("Đã copy toàn bộ Bullets"); }}><Copy className="h-3 w-3 mr-1.5" /> Copy toàn bộ Bullets</Button>
+                                        </div>
+                                      </div>
+                                    );
+                                  } catch { return <p className="text-xs text-muted-foreground px-1">—</p>; }
                                 })()}
                               </div>
-                              <div className="group/islug rounded-md bg-muted/40 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative">
-                                <span className="text-[10px] text-muted-foreground block mb-1">Slugs</span>
-                                {(() => {
-                                  const slugs = (idea.amazonListing?.slugs || "").split("\n").filter(Boolean);
-                                  if (slugs.length === 0) return <p className="text-xs text-muted-foreground">—</p>;
-                                  return (
-                                    <div className="flex flex-wrap gap-1 pr-6">
-                                      {slugs.map((s: string, i: number) => <code key={i} className="text-[10px] bg-muted px-1.5 py-0.5 rounded">{s}</code>)}
-                                      <CopyButton text={idea.amazonListing?.slugs || ""} className="absolute right-2 top-2 h-5 w-5 opacity-0 group-hover/islug:opacity-100 transition-opacity" />
-                                    </div>
-                                  );
-                                })()}
-                              </div>
-                            </div>
-                            {renderPhotoGallery("amazon", idea.amazonListing, amzForm, setAmzEditOpen, async (data) => {
-                              try {
-                                setSaving(true);
-                                const res = await fetch(`/api/ideas/${id}/amazon-listing`, { method: "PUT", body: JSON.stringify(data) });
-                                if (!res.ok) throw new Error("Lỗi");
-                                await fetchIdea();
-                              } catch (err) { toast.error("Lỗi cập nhật ảnh Amazon"); }
-                              finally { setSaving(false); }
-                            })}
-                          </div>
-                          <Separator className="my-2" />
-                          {/* ─── PREMIUM CONTENT SECTION ─── */}
-                          <div className="space-y-3 pb-2">
-                            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Premium Content</span>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                              <div className="group/video rounded-md bg-muted/40 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative flex flex-col justify-center">
-                                <span className="text-[10px] text-muted-foreground block mb-1">Video</span>
-                                {idea.amazonListing?.videoUrl ? (
-                                  <a href={idea.amazonListing.videoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"><ExternalLink className="h-3 w-3" /> Mở Video URL</a>
-                                ) : <p className="text-xs text-muted-foreground">—</p>}
-                                {idea.amazonListing?.videoUrl && <CopyButton text={idea.amazonListing.videoUrl} className="absolute right-2 top-2 h-5 w-5 opacity-0 group-hover/video:opacity-100 transition-opacity" />}
-                              </div>
 
-                              <div className="group/aplus rounded-md bg-muted/40 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative flex flex-col justify-center">
-                                <span className="text-[10px] text-muted-foreground block mb-1">Content A+</span>
-                                {idea.amazonListing?.contentAPlusUrl ? (
-                                  <a href={idea.amazonListing.contentAPlusUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"><ExternalLink className="h-3 w-3" /> Mở A+ URL</a>
-                                ) : <p className="text-xs text-muted-foreground">—</p>}
-                                {idea.amazonListing?.contentAPlusUrl && <CopyButton text={idea.amazonListing.contentAPlusUrl} className="absolute right-2 top-2 h-5 w-5 opacity-0 group-hover/aplus:opacity-100 transition-opacity" />}
-                              </div>
-                            </div>
-
-                            {idea.fulfillmentType === "FBA" && idea.amazonListing && (
-                              <div className="rounded-md bg-muted/40 px-3 py-2 border border-transparent hover:border-border/50 transition-colors flex items-center gap-4">
-                                <div>
-                                  <span className="text-[10px] text-muted-foreground block">Vine Program</span>
-                                  <span className="text-xs font-medium">{idea.amazonListing.vineStatus === "not_enrolled" ? "Chưa tham gia" : idea.amazonListing.vineStatus === "enrolled" ? "Đã đăng ký" : idea.amazonListing.vineStatus === "reviewing" ? "Đang đánh giá" : idea.amazonListing.vineStatus === "completed" ? "Hoàn thành" : "—"}</span>
+                              <div className="grid grid-cols-2 gap-3 pt-1">
+                                <div className="group/itags flex flex-col rounded-md bg-muted/40 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative overflow-hidden">
+                                  <div className="flex items-center gap-2 mb-1.5 shrink-0"><span className="text-[10px] text-muted-foreground block">Tags</span><Badge variant="outline" className="text-[9px] font-mono font-medium h-4 px-1.5 border-primary/20 bg-primary/5 text-primary/70">500 ký tự max</Badge></div>
+                                  {(() => {
+                                    const tags = (idea.amazonListing?.tags || "").split(";").filter(Boolean);
+                                    if (tags.length === 0) return <p className="text-xs text-muted-foreground">—</p>;
+                                    return (
+                                      <div className="flex flex-wrap gap-1 pr-6 max-h-24 overflow-y-auto custom-scrollbar content-start">
+                                        {tags.map((t: string, i: number) =>
+                                          <Badge key={i} variant="secondary" className="text-xs py-1 px-2.5 font-normal group/tag flex items-center shrink-0 overflow-hidden transition-all duration-300">
+                                            <span>{t.trim()}</span>
+                                            <div className="flex items-center gap-1 w-0 opacity-0 group-hover:w-12 group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-300 overflow-hidden justify-end">
+                                              <a title="Search on Amazon" href={`https://www.amazon.com/s?k=${encodeURIComponent(t.trim())}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 bg-background/80 rounded shrink-0"><ExternalLink className="h-3 w-3" /></a>
+                                              <a title="Search on Etsy" href={`https://www.etsy.com/search?q=${encodeURIComponent(t.trim())}&ref=search_bar&instant_download=false`} target="_blank" rel="noopener noreferrer" className="text-orange-500 hover:text-orange-700 bg-background/80 rounded shrink-0"><ShoppingBag className="h-3 w-3" /></a>
+                                            </div>
+                                          </Badge>
+                                        )}
+                                        <CopyButton text={idea.amazonListing?.tags || ""} className="absolute right-2 top-2 h-5 w-5 opacity-0 group-hover/itags:opacity-100 transition-opacity bg-background" />
+                                      </div>
+                                    );
+                                  })()}
                                 </div>
-                                {idea.amazonListing.vineReviewUrl && (
-                                  <div className="pl-4 border-l border-border/50 relative group/vine">
-                                    <span className="text-[10px] text-muted-foreground block">Vine Review</span>
-                                    <a href={idea.amazonListing.vineReviewUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:underline"><ExternalLink className="h-3 w-3" /> Xem Review</a>
-                                    <CopyButton text={idea.amazonListing.vineReviewUrl} className="absolute -right-6 top-1/2 -translate-y-1/2 h-5 w-5 opacity-0 group-hover/vine:opacity-100 transition-opacity" />
-                                  </div>
-                                )}
+                                <div className="group/islug flex flex-col rounded-md bg-muted/40 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative">
+                                  <div className="flex items-center gap-2 mb-1.5"><span className="text-[10px] text-muted-foreground block">Slugs</span><Badge variant="outline" className="text-[9px] font-mono font-medium h-4 px-1.5 border-primary/20 bg-primary/5 text-primary/70">12 slugs max</Badge></div>
+                                  {(() => {
+                                    const slugs = (idea.amazonListing?.slugs || "").split("\n").filter(Boolean);
+                                    if (slugs.length === 0) return <p className="text-xs text-muted-foreground">—</p>;
+                                    return (
+                                      <div className="flex flex-col gap-1 pr-6 max-h-24 overflow-y-auto custom-scrollbar">
+                                        {slugs.map((s: string, i: number) => <code key={i} className="text-[10px] bg-muted px-1.5 py-0.5 rounded truncate">{s}</code>)}
+                                        <CopyButton text={idea.amazonListing?.slugs || ""} className="absolute right-2 top-2 h-5 w-5 opacity-0 group-hover/islug:opacity-100 transition-opacity bg-background" />
+                                      </div>
+                                    );
+                                  })()}
+                                </div>
                               </div>
-                            )}
+
+                            </div>
                           </div>
                         </CardContent>
                       </Card>
@@ -1440,24 +1339,44 @@ export default function IdeaDetailPage() {
             {/* Main Image */}
             <div className="p-3 pb-2">
               {mainImageDirectUrl ? (
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <div className="relative aspect-square rounded-xl overflow-hidden bg-muted cursor-pointer group shadow-sm">
-                      <img src={mainImageDirectUrl} alt={idea.msku} className="object-cover w-full h-full transition-transform duration-300 group-hover:scale-110"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
-                    </div>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-fit bg-transparent border-none shadow-none !ring-0 p-0" showCloseButton={false}>
-                    <img src={mainImageDirectUrl} alt="Full" className="max-h-[95vh] max-w-[95vw] rounded-md object-contain" />
-                  </DialogContent>
-                </Dialog>
+                <ImagePreviewDialog url={mainImageDirectUrl}>
+                  <div className="relative aspect-square rounded-xl overflow-hidden bg-muted cursor-pointer group shadow-sm">
+                    <img src={mainImageDirectUrl} alt={idea.msku} className="object-cover w-full h-full transition-transform duration-300 group-hover:scale-110"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                  </div>
+                </ImagePreviewDialog>
               ) : (
                 <div className="aspect-square rounded-xl bg-muted flex items-center justify-center"><ImageIcon className="h-12 w-12 text-muted-foreground/40" /></div>
               )}
-              <a href={idea.mainImageUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-1 text-[11px] text-blue-600 hover:underline mt-1.5">
-                <ExternalLink className="h-3 w-3" /> Mở trên Drive
-              </a>
+            </div>
+
+            {/* Origin */}
+            <div className="px-3 pb-3">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Nguồn gốc ý tưởng/ sản phẩm</span>
+              <div className="flex flex-wrap gap-2">
+                {sourceLinks.length === 0 ? (
+                  <ButtonIconHover variant="outline" size="sm" className="h-7 text-[10px] bg-background shadow-sm hover:bg-muted/50 rounded-full px-3 w-fit opacity-50 cursor-not-allowed">
+                    Chưa có nguồn gốc
+                  </ButtonIconHover>
+                ) : (
+                  sourceLinks.slice(0, 5).map((link, i) => {
+                    let domain = link;
+                    try { domain = new URL(link).hostname.replace("www.", ""); } catch { }
+                    return (
+                      <ButtonIconHover
+                        key={i}
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-[10px] bg-background shadow-sm hover:bg-muted/50 rounded-full px-3 w-fit"
+                        onClick={() => window.open(link, "_blank")}
+                      >
+                        {domain}
+                      </ButtonIconHover>
+                    );
+                  })
+                )}
+              </div>
             </div>
 
             <Separator />
@@ -1465,8 +1384,6 @@ export default function IdeaDetailPage() {
             {/* Info Section */}
             <div className="p-3 space-y-2">
               <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Thông tin chung</span>
-
-
               <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] px-1">
                 <div className="flex items-center gap-1.5 text-muted-foreground"><Package className="h-3 w-3" /> MSKU</div><div className="text-right flex items-center justify-end gap-1"><code className="bg-muted px-1 rounded">{idea.msku}</code><CopyButton text={idea.msku} className="h-3 w-3 text-muted-foreground hover:text-foreground" /></div>
                 <div className="flex items-center gap-1.5 text-muted-foreground"><Layers className="h-3 w-3" /> Chủ đề</div><span className="text-right font-medium">{idea.topic.name}</span>
@@ -1476,302 +1393,27 @@ export default function IdeaDetailPage() {
               </div>
             </div>
 
-            {/* Photo & File Management — after approval */}
             <Separator />
+
+            {/* File Management */}
             <div className="p-3 space-y-2">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Quản lý ảnh & File</span>
-
-              {idea.photoAssignee && <div className="flex items-center justify-between px-1 py-0.5"><span className="text-[10px] text-muted-foreground">Người nhận</span><span className="text-xs font-medium">{idea.photoAssignee.fullName}</span></div>}
-
-              {/* ─── Gallery Preview ─── */}
-              {(() => {
-                let amzGallery: string[] = [];
-                let etsyGallery: string[] = [];
-                try { amzGallery = typeof idea.amazonListing?.galleryImages === "string" ? JSON.parse(idea.amazonListing.galleryImages) : (idea.amazonListing?.galleryImages || []); } catch { }
-                try { etsyGallery = typeof idea.etsyListing?.galleryImages === "string" ? JSON.parse(idea.etsyListing.galleryImages) : (idea.etsyListing?.galleryImages || []); } catch { }
-                amzGallery = amzGallery.filter(Boolean);
-                etsyGallery = etsyGallery.filter(Boolean);
-                const hasGallery = amzGallery.length > 0 || etsyGallery.length > 0;
-                if (!hasGallery) return null;
-                return (
-                  <div className="space-y-2">
-                    <Separator className="my-1" />
-                    {amzGallery.length > 0 && (
-                      <div>
-                        <p className="text-[10px] text-muted-foreground mb-1.5">Amazon ({amzGallery.length} ảnh)</p>
-                        <div className="flex gap-1 flex-wrap">
-                          {amzGallery.map((url, i) => {
-                            const directUrl = convertToDirectImageUrl(url) || url;
-                            const isDrive = isDriveLink(url);
-                            return (
-                              <Dialog key={`amz-${i}`}>
-                                <DialogTrigger asChild>
-                                  <div className="w-10 h-10 rounded border overflow-hidden bg-muted cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all">
-                                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img src={directUrl} alt={`Amazon ${i + 1}`} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                                  </div>
-                                </DialogTrigger>
-                                <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-fit bg-transparent border-none shadow-none !ring-0 p-0" showCloseButton={false}>
-                                  <div className="flex flex-col items-center gap-2">
-                                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img src={directUrl} alt={`Amazon ${i + 1}`} className="max-h-[80vh] max-w-[95vw] rounded-md object-contain" />
-                                    <div className="flex items-center gap-2 bg-background/90 backdrop-blur-sm rounded-lg px-3 py-2 shadow">
-                                      <CopyButton text={url} className="h-7 w-7" />
-                                      <span className="text-[10px] text-muted-foreground">Sao chép liên kết</span>
-                                      {isDrive && (
-                                        <>
-                                          <Separator orientation="vertical" className="h-5" />
-                                          <CopyButton text={driveToPreviewUrl(url)} className="h-7 w-7" />
-                                          <span className="text-[10px] text-muted-foreground">Copy link xem trực tiếp</span>
-                                        </>
-                                      )}
-                                      <Separator orientation="vertical" className="h-5" />
-                                      <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => window.open(url, "_blank")}>
-                                        <ExternalLink className="h-3 w-3" /> Xem tại trang đích
-                                      </Button>
-                                    </div>
-                                  </div>
-                                </DialogContent>
-                              </Dialog>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                    {etsyGallery.length > 0 && (
-                      <div>
-                        <p className="text-[10px] text-muted-foreground mb-1.5">Etsy ({etsyGallery.length} ảnh)</p>
-                        <div className="flex gap-1 flex-wrap">
-                          {etsyGallery.map((url, i) => {
-                            const directUrl = convertToDirectImageUrl(url) || url;
-                            const isDrive = isDriveLink(url);
-                            return (
-                              <Dialog key={`etsy-${i}`}>
-                                <DialogTrigger asChild>
-                                  <div className="w-10 h-10 rounded border overflow-hidden bg-muted cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all">
-                                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img src={directUrl} alt={`Etsy ${i + 1}`} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                                  </div>
-                                </DialogTrigger>
-                                <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-fit bg-transparent border-none shadow-none !ring-0 p-0" showCloseButton={false}>
-                                  <div className="flex flex-col items-center gap-2">
-                                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img src={directUrl} alt={`Etsy ${i + 1}`} className="max-h-[80vh] max-w-[95vw] rounded-md object-contain" />
-                                    <div className="flex items-center gap-2 bg-background/90 backdrop-blur-sm rounded-lg px-3 py-2 shadow">
-                                      <CopyButton text={url} className="h-7 w-7" />
-                                      <span className="text-[10px] text-muted-foreground">Sao chép liên kết</span>
-                                      {isDrive && (
-                                        <>
-                                          <Separator orientation="vertical" className="h-5" />
-                                          <CopyButton text={driveToPreviewUrl(url)} className="h-7 w-7" />
-                                          <span className="text-[10px] text-muted-foreground">Copy link xem trực tiếp</span>
-                                        </>
-                                      )}
-                                      <Separator orientation="vertical" className="h-5" />
-                                      <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => window.open(url, "_blank")}>
-                                        <ExternalLink className="h-3 w-3" /> Xem tại trang đích
-                                      </Button>
-                                    </div>
-                                  </div>
-                                </DialogContent>
-                              </Dialog>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* ─── Photo Workflow Actions ─── */}
-
-              {/* Sếp/QL yêu cầu làm ảnh */}
-              {canManagePhotos && idea.photoStatus === "not_requested" && (
-                <Button size="sm" className="w-full h-7 text-xs" onClick={() => handleUpdateIdea({ photoStatus: "awaiting_photos" })} disabled={saving}>
-                  <ImageIcon className="h-3 w-3 mr-1" /> Yêu cầu làm ảnh
-                </Button>
-              )}
-
-              {/* NV nhận nhiệm vụ */}
-              {idea.photoStatus === "awaiting_photos" && !idea.photoAssigneeId && (
-                <Button size="sm" className="w-full h-7 text-xs" onClick={() => handleUpdateIdea({ photoAssigneeId: session?.user?.id })} disabled={saving}>
-                  <Check className="h-3 w-3 mr-1" /> Nhận nhiệm vụ làm ảnh
-                </Button>
-              )}
-
-              {/* NV đã nhận — hiện nút hủy + gallery quick-edit + nộp ảnh */}
-              {idea.photoStatus === "awaiting_photos" && idea.photoAssigneeId === session?.user?.id && (
-                <div className="space-y-1.5">
-                  <div className="flex gap-1">
-                    <Button size="sm" variant="outline" className="flex-1 h-7 text-xs" onClick={() => handleUpdateIdea({ photoAssigneeId: null })} disabled={saving}>
-                      <XCircle className="h-3 w-3 mr-1" /> Hủy nhận
-                    </Button>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-[10px] text-muted-foreground">Thêm ảnh gallery nhanh</span>
-                    <div className="flex gap-1">
-                      <Input className="h-7 text-xs flex-1" value={amzForm.galleryImages.filter(Boolean).length > 0 ? `${amzForm.galleryImages.filter(Boolean).length} ảnh Amazon` : ""} readOnly placeholder="Link ảnh Amazon..." />
-                      <Button size="sm" variant="outline" className="h-7 text-xs shrink-0" onClick={() => setAmzEditOpen(true)} disabled={saving || (idea.amazonListing?.listingStatus === "published" || idea.etsyListing?.listingStatus === "published")}><Pencil className="h-3 w-3 mr-1" /> Sửa</Button>
-                    </div>
-                    <div className="flex gap-1">
-                      <Input className="h-7 text-xs flex-1" value={etsyForm.galleryImages.filter(Boolean).length > 0 ? `${etsyForm.galleryImages.filter(Boolean).length} ảnh Etsy` : ""} readOnly placeholder="Link ảnh Etsy..." />
-                      <Button size="sm" variant="outline" className="h-7 text-xs shrink-0" onClick={() => setEtsyEditOpen(true)} disabled={saving || (idea.amazonListing?.listingStatus === "published" || idea.etsyListing?.listingStatus === "published")}><Pencil className="h-3 w-3 mr-1" /> Sửa</Button>
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    {(() => {
-                      const amzHas = amzForm.galleryImages.filter(Boolean).length > 0;
-                      const etsyHas = etsyForm.galleryImages.filter(Boolean).length > 0;
-                      return (
-                        <>
-                          <Button size="sm" className="w-full h-7 text-xs" onClick={() => {
-                            if (!amzHas) { toast.error("Thêm ít nhất 1 ảnh Amazon!"); return; }
-                            handleSaveAmazon().then(() => handleUpdateIdea({ photoStatus: "pending_approval" }));
-                          }} disabled={saving}><ShoppingBag className="h-3 w-3 mr-1" /> Nộp ảnh Amazon {amzHas ? `(${amzForm.galleryImages.filter(Boolean).length})` : ""}</Button>
-                          <div className="flex gap-1">
-                            <Button size="sm" variant="outline" className="flex-1 h-7 text-xs" onClick={() => {
-                              if (!etsyHas) { toast.error("Thêm ít nhất 1 ảnh Etsy!"); return; }
-                              handleSaveEtsy().then(() => handleUpdateIdea({ photoStatus: "pending_approval" }));
-                            }} disabled={saving}>Nộp ảnh Etsy {etsyHas ? `(${etsyForm.galleryImages.filter(Boolean).length})` : ""}</Button>
-                            <Button size="sm" className="flex-1 h-7 text-xs" onClick={() => {
-                              if (!amzHas && !etsyHas) { toast.error("Thêm ảnh Amazon hoặc Etsy!"); return; }
-                              const p = []; if (amzHas) p.push(handleSaveAmazon()); if (etsyHas) p.push(handleSaveEtsy());
-                              Promise.all(p).then(() => handleUpdateIdea({ photoStatus: "pending_approval" }));
-                            }} disabled={saving}>Cả 2</Button>
-                          </div>
-                        </>
-                      );
-                    })()}
-                  </div>
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">File Thiết Kế</span>
+              <div className="space-y-2 mt-1">
+                <div className="flex items-center justify-between text-[11px] px-1">
+                  <span className="text-muted-foreground font-medium">Trạng thái file:</span>
+                  {statusBadge(idea.fileStatus || "not_requested", fileStatusLabels)}
                 </div>
-              )}
-
-              {/* NV nộp lại ảnh khi bị yêu cầu sửa */}
-              {idea.photoStatus === "revision_requested" && idea.photoAssigneeId === session?.user?.id && (
-                <div className="space-y-1.5">
-                  {idea.photoRevisionNote && (
-                    <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 p-2 border border-amber-200 dark:border-amber-800">
-                      <p className="text-[10px] font-medium text-amber-800 dark:text-amber-300 mb-0.5">Yêu cầu sửa ảnh:</p>
-                      <p className="text-[10px] text-amber-700 dark:text-amber-400">{idea.photoRevisionNote}</p>
-                    </div>
-                  )}
-                  <Button size="sm" variant="outline" className="w-full h-7 text-xs" onClick={() => setAmzEditOpen(true)} disabled={saving || (idea.amazonListing?.listingStatus === "published" || idea.etsyListing?.listingStatus === "published")}><Pencil className="h-3 w-3 mr-1" /> Sửa ảnh gallery</Button>
-                  <Button size="sm" className="w-full h-7 text-xs" onClick={() => handleUpdateIdea({ photoStatus: "pending_approval" })} disabled={saving}><ImageIcon className="h-3 w-3 mr-1" /> Nộp lại ảnh đã sửa</Button>
-                </div>
-              )}
-
-              {/* Đang chờ - người khác đã nhận */}
-              {idea.photoStatus === "awaiting_photos" && idea.photoAssigneeId && idea.photoAssigneeId !== session?.user?.id && !canManagePhotos && (
-                <p className="text-[10px] text-muted-foreground italic px-1">{idea.photoAssignee?.fullName || "NV khác"} đã nhận nhiệm vụ này</p>
-              )}
-
-              {/* Sếp/QL gỡ assignee */}
-              {canManagePhotos && idea.photoStatus === "awaiting_photos" && idea.photoAssigneeId && (
-                <Button size="sm" className="w-full h-7 text-xs" variant="ghost" onClick={() => handleUpdateIdea({ photoAssigneeId: null })} disabled={saving}>
-                  <XCircle className="h-3 w-3 mr-1" /> Gỡ người nhận ({idea.photoAssignee?.fullName})
-                </Button>
-              )}
-
-              {/* Sếp/QL duyệt ảnh */}
-              {canManagePhotos && idea.photoStatus === "pending_approval" && (
-                <div className="space-y-1.5">
-                  <Button size="sm" className="w-full h-7 text-xs bg-green-600 hover:bg-green-700" onClick={() => handleUpdateIdea({ photoStatus: "approved" })} disabled={saving}>
-                    <ShieldCheck className="h-3 w-3 mr-1" /> Duyệt ảnh
-                  </Button>
-                  <Input value={photoRevisionInput} onChange={(e) => setPhotoRevisionInput(e.target.value)} placeholder="Lý do yêu cầu sửa ảnh..." className="h-7 text-xs" />
-                  <Button size="sm" className="w-full h-7 text-xs" variant="outline" onClick={() => {
-                    if (!photoRevisionInput.trim()) { toast.error("Nhập lý do yêu cầu sửa ảnh"); return; }
-                    handleUpdateIdea({ photoStatus: "revision_requested", photoRevisionNote: photoRevisionInput.trim() });
-                    setPhotoRevisionInput("");
-                  }} disabled={saving}><Edit3 className="h-3 w-3 mr-1" /> Yêu cầu sửa ảnh</Button>
-                </div>
-              )}
-
-              <>
-                <Separator className="my-1" />
-                <div className="flex items-center justify-between px-1 py-0.5"><span className="text-[10px] text-muted-foreground">Trạng thái file</span>{statusBadge(idea.fileStatus || "not_requested", fileStatusLabels)}</div>
-                {idea.productionFileUrl && (
-                  <div className="space-y-1 px-1">
-                    <a href={idea.productionFileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-blue-600 hover:underline text-xs"><ExternalLink className="h-3 w-3" /> Mở file SX</a>
+                {idea.designFileUrl && (
+                  <div className="flex items-center justify-between text-[11px] px-1">
+                    <span className="text-muted-foreground font-medium">Link file:</span>
+                    <a href={idea.designFileUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-1 bg-blue-50 px-2 py-1 rounded">
+                      <ExternalLink className="h-3 w-3" /> Xem file thiết kế
+                    </a>
                   </div>
                 )}
-                
-                {/* Sếp/QL yêu cầu làm file */}
-                {canManagePhotos && idea.fileStatus === "not_requested" && (
-                  <Button size="sm" className="w-full h-7 text-xs" variant="outline" onClick={() => handleUpdateIdea({ fileStatus: "awaiting_file" })} disabled={saving}>
-                    <FileText className="h-3 w-3 mr-1" /> Yêu cầu làm file
-                  </Button>
-                )}
-
-                {/* NV nhận nhiệm vụ */}
-                {idea.fileStatus === "awaiting_file" && !idea.fileAssigneeId && (
-                  <Button size="sm" className="w-full h-7 text-xs" onClick={() => handleUpdateIdea({ fileAssigneeId: session?.user?.id })} disabled={saving}>
-                    <Check className="h-3 w-3 mr-1" /> Nhận nhiệm vụ làm file
-                  </Button>
-                )}
-
-                {/* NV đã nhận — hiện nút hủy + nộp file */}
-                {idea.fileStatus === "awaiting_file" && idea.fileAssigneeId === session?.user?.id && (
-                  <div className="space-y-1.5">
-                    <Button size="sm" variant="outline" className="w-full h-7 text-xs" onClick={() => handleUpdateIdea({ fileAssigneeId: null })} disabled={saving}>
-                      <XCircle className="h-3 w-3 mr-1" /> Hủy nhận
-                    </Button>
-                    <Button size="sm" className="w-full h-7 text-xs" onClick={() => { if (!idea.productionFileUrl) { toast.error("Thêm link file SX!"); return; } handleUpdateIdea({ fileStatus: "pending_approval" }); }} disabled={saving}>
-                      <FileText className="h-3 w-3 mr-1" /> Nộp file
-                    </Button>
-                  </div>
-                )}
-
-                {/* NV nộp lại file khi bị yêu cầu sửa */}
-                {idea.fileStatus === "revision_requested" && idea.fileAssigneeId === session?.user?.id && (
-                  <div className="space-y-1.5">
-                    {idea.fileRevisionNote && (
-                      <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 p-2 border border-amber-200 dark:border-amber-800">
-                        <p className="text-[10px] font-medium text-amber-800 dark:text-amber-300 mb-0.5">Yêu cầu sửa file:</p>
-                        <p className="text-[10px] text-amber-700 dark:text-amber-400">{idea.fileRevisionNote}</p>
-                      </div>
-                    )}
-                    <Button size="sm" className="w-full h-7 text-xs" onClick={() => handleUpdateIdea({ fileStatus: "pending_approval" })} disabled={saving}>
-                      <FileText className="h-3 w-3 mr-1" /> Nộp lại file đã sửa
-                    </Button>
-                  </div>
-                )}
-
-                {/* Đang chờ - người khác đã nhận */}
-                {idea.fileStatus === "awaiting_file" && idea.fileAssigneeId && idea.fileAssigneeId !== session?.user?.id && !canManagePhotos && (
-                  <p className="text-[10px] text-muted-foreground italic px-1">{idea.fileAssignee?.fullName || "NV khác"} đã nhận nhiệm vụ này</p>
-                )}
-
-                {/* Sếp/QL gỡ assignee */}
-                {canManagePhotos && idea.fileStatus === "awaiting_file" && idea.fileAssigneeId && (
-                  <Button size="sm" className="w-full h-7 text-xs" variant="ghost" onClick={() => handleUpdateIdea({ fileAssigneeId: null })} disabled={saving}>
-                    <XCircle className="h-3 w-3 mr-1" /> Gỡ người nhận ({idea.fileAssignee?.fullName})
-                  </Button>
-                )}
-
-                {/* Sếp/QL duyệt file */}
-                {canManagePhotos && idea.fileStatus === "pending_approval" && (
-                  <div className="space-y-1.5">
-                    <Button size="sm" className="w-full h-7 text-xs bg-green-600 hover:bg-green-700 text-white" onClick={() => handleUpdateIdea({ fileStatus: "approved" })} disabled={saving}>
-                      <ShieldCheck className="h-3 w-3 mr-1" /> Duyệt file
-                    </Button>
-                    <Input value={fileRevisionInput} onChange={(e) => setFileRevisionInput(e.target.value)} placeholder="Lý do yêu cầu sửa..." className="h-7 text-xs" />
-                    <Button size="sm" className="w-full h-7 text-xs" variant="outline" onClick={() => {
-                      if (!fileRevisionInput.trim()) { toast.error("Nhập lý do yêu cầu sửa"); return; }
-                      handleUpdateIdea({ fileStatus: "revision_requested", fileRevisionNote: fileRevisionInput.trim() });
-                    }} disabled={saving}>
-                      <Edit3 className="h-3 w-3 mr-1" /> Yêu cầu sửa file
-                    </Button>
-                  </div>
-                )}
-
-                {/* Khi chưa có gì và không phải Sếp/QL */}
-                {!canManagePhotos && idea.fileStatus === "not_requested" && (
-                  <p className="text-[10px] text-muted-foreground italic px-1">Chưa có file SX</p>
-                )}
-              </>
+              </div>
             </div>
+
             {/* AI Section */}
             <>
               <Separator />
@@ -1794,7 +1436,7 @@ export default function IdeaDetailPage() {
 
         </div>
 
-        <GalleryLightbox open={lightboxOpen} onOpenChange={setLightboxOpen} images={lightboxImages} initialIndex={lightboxIndex} />
+
       </div>
     </TooltipProvider>
   );
