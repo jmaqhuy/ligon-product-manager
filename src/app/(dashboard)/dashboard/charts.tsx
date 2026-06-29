@@ -141,7 +141,7 @@ export function DashboardCharts() {
             color="bg-blue-500"
           />
           <StatusBar
-            label="Đã đăng bán"
+            label="Đang bán"
             value={data.statusBreakdown.ideas.published}
             total={data.statusBreakdown.ideas.reviewing + data.statusBreakdown.ideas.approved + data.statusBreakdown.ideas.published}
             color="bg-green-500"

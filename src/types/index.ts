@@ -101,7 +101,7 @@ export const listingStatusLabels: Record<ListingStatus, string> = {
   not_ready: "Chưa sẵn sàng",
   ready: "Sẵn sàng",
   uploading: "Đang up",
-  published: "Đã đăng bán",
+  published: "Đang bán",
   error: "Lỗi",
   fixed: "Đã sửa",
   delisted: "Bị sàn gỡ",

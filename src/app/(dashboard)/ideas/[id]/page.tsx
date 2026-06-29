@@ -349,7 +349,16 @@ export default function IdeaDetailPage() {
               </Button>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h1 className="text-lg font-bold tracking-tight">{idea.msku}</h1>
+                  <h1 
+                    className="text-lg font-bold tracking-tight cursor-pointer hover:text-blue-600 transition-colors"
+                    onClick={() => {
+                      navigator.clipboard.writeText(idea.msku);
+                      toast.success("Đã copy MSKU");
+                    }}
+                    title="Click để copy MSKU"
+                  >
+                    {idea.msku}
+                  </h1>
                   {statusBadge(idea.status, ideaStatusLabels)}
                   {idea.needsReReview && <Badge variant="destructive" className="animate-pulse text-[10px]">Sửa đổi mới</Badge>}
 
@@ -695,59 +704,10 @@ export default function IdeaDetailPage() {
 
             <Separator />
 
-            {/* Origin */}
-            <div className="p-3 space-y-2">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Nguồn gốc</span>
-              <div className="flex flex-wrap gap-2 px-1">
-                {sourceLinks.length === 0 ? (
-                  <ButtonIconHover variant="outline" size="sm" className="h-7 text-[10px] bg-background shadow-sm hover:bg-muted/50 rounded-full px-3 w-fit opacity-50 cursor-not-allowed">
-                    Chưa có nguồn gốc
-                  </ButtonIconHover>
-                ) : (
-                  sourceLinks.slice(0, 5).map((link, i) => {
-                    if (link.startsWith("internal:")) {
-                      const originalId = link.substring(9);
-                      const originalIdea = idea.internalSourceIdeas?.find((idObj: any) => idObj.id === originalId);
-                      const displayMsku = originalIdea ? originalIdea.msku : "Nội bộ";
-                      return (
-                        <ButtonIconHover
-                          key={i}
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-[10px] bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 shadow-sm hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-full px-3 w-fit"
-                          onClick={() => window.open(`/ideas/${originalId}`, "_blank")}
-                        >
-                          {displayMsku}
-                        </ButtonIconHover>
-                      );
-                    }
-                    let domain = link;
-                    try { domain = new URL(link).hostname.replace("www.", ""); } catch { }
-                    return (
-                      <ButtonIconHover
-                        key={i}
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-[10px] bg-background shadow-sm hover:bg-muted/50 rounded-full px-3 w-fit"
-                        onClick={() => window.open(link, "_blank")}
-                      >
-                        {domain}
-                      </ButtonIconHover>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-
-            <Separator />
-
             {/* Info Section */}
             <div className="p-3 space-y-2">
               <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Thông tin chung</span>
               <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] px-1">
-                <div className="flex items-center gap-1.5 text-muted-foreground"><Package className="h-3 w-3" /> MSKU</div><div className="text-right flex items-center justify-end gap-1"><code className="bg-muted px-1 rounded">{idea.msku}</code><CopyButton text={idea.msku} className="h-3 w-3 text-muted-foreground hover:text-foreground" /></div>
-                <div className="flex items-center gap-1.5 text-muted-foreground"><UserCircle className="h-3 w-3" /> Sản phẩm của</div><span className="text-right font-medium truncate">{idea.source === "partner" ? `Đối tác: ${idea.partner?.name || idea.partnerLabel || "—"}` : idea.source === "boss" ? `Boss: ${idea.createdBy?.fullName || "—"}` : `Nhân viên: ${idea.createdBy?.fullName || "—"}`}</span>
-                <div className="flex items-center gap-1.5 text-muted-foreground"><Layers className="h-3 w-3" /> Chủ đề</div><span className="text-right font-medium truncate">{idea.topic?.name || "—"}</span>
                 <div className="flex items-center gap-1.5 text-muted-foreground"><Calendar className="h-3 w-3" /> Ngày tạo</div><span className="text-right font-medium">{new Date(idea.createdAt).toLocaleDateString("vi-VN")}</span>
                 <div className="flex items-center gap-1.5 text-muted-foreground"><Ruler className="h-3 w-3" /> Kích thước</div><span className="text-right font-medium">{idea.widthCm ? `${idea.widthCm}×${idea.heightCm}×${idea.thicknessMm}mm` : "—"}</span>
                 <div className="flex items-center gap-1.5 text-muted-foreground"><Layers className="h-3 w-3" /> Vật liệu</div><span className="text-right font-medium truncate">{idea.material || "—"}</span>
@@ -859,6 +819,52 @@ export default function IdeaDetailPage() {
               </div>
             </div>
 
+            <Separator />
+
+            {/* Origin */}
+            <div className="p-3 space-y-2">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Nguồn gốc</span>
+              <div className="flex flex-wrap gap-2 px-1">
+                {sourceLinks.length === 0 ? (
+                  <ButtonIconHover variant="outline" size="sm" className="h-7 text-[10px] bg-background shadow-sm hover:bg-muted/50 rounded-full px-3 w-fit opacity-50 cursor-not-allowed">
+                    Chưa có nguồn gốc
+                  </ButtonIconHover>
+                ) : (
+                  sourceLinks.slice(0, 5).map((link, i) => {
+                    if (link.startsWith("internal:")) {
+                      const originalId = link.substring(9);
+                      const originalIdea = idea.internalSourceIdeas?.find((idObj: any) => idObj.id === originalId);
+                      const displayMsku = originalIdea ? originalIdea.msku : "Nội bộ";
+                      return (
+                        <ButtonIconHover
+                          key={i}
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-[10px] bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 shadow-sm hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-full px-3 w-fit"
+                          onClick={() => window.open(`/ideas/${originalId}`, "_blank")}
+                        >
+                          {displayMsku}
+                        </ButtonIconHover>
+                      );
+                    }
+                    let domain = link;
+                    try { domain = new URL(link).hostname.replace("www.", ""); } catch { }
+                    return (
+                      <ButtonIconHover
+                        key={i}
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-[10px] bg-background shadow-sm hover:bg-muted/50 rounded-full px-3 w-fit"
+                        onClick={() => window.open(link, "_blank")}
+                      >
+                        {domain}
+                      </ButtonIconHover>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
             {/* AI Section */}
             <>
               <Separator />
@@ -870,7 +876,7 @@ export default function IdeaDetailPage() {
                 </div>
                 {idea.prompt && (
                   <div className="mt-1 rounded-md bg-muted/50 border p-2 relative group/prompt">
-                    <p className="text-xs whitespace-pre-wrap text-muted-foreground">{idea.prompt}</p>
+                    <p className="text-xs whitespace-pre-wrap text-muted-foreground line-clamp-3 hover:line-clamp-none transition-all">{idea.prompt}</p>
                     <CopyButton text={idea.prompt} className="absolute top-1.5 right-1.5 h-5 w-5 opacity-0 group-hover/prompt:opacity-100 transition-opacity" />
                   </div>
                 )}

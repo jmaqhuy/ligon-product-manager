@@ -213,7 +213,7 @@ export function FilterPopover({ isEmployee, topics = [] }: { isEmployee: boolean
                   Sẵn sàng đăng
                 </Button>
                 <Button variant="secondary" size="sm" className="justify-start text-xs h-7" onClick={() => applyTemplate("published")}>
-                  Đã đăng bán
+                  Đang bán
                 </Button>
               </div>
             </div>

@@ -68,168 +68,170 @@ export function AmazonListingTab({
 
   return (
     <>
-      <TabsContent value="amazon" className="flex-1 overflow-y-auto mt-0 space-y-3 data-[state=inactive]:hidden pr-1 relative">
+      <TabsContent value="amazon" className="flex-1 overflow-y-auto mt-0 space-y-3 data-[state=inactive]:hidden pr-1 relative custom-scrollbar">
                     <fieldset disabled={isNotApproved && !isPartner} className="space-y-3">
                       {/* FBA/FBM — belongs to Amazon */}
 
-                      {/* Amazon Listing Card */}
-                      <Card>
-                        <CardHeader className="pb-2 flex flex-row items-center justify-between">
-                          <CardTitle className="text-base font-bold flex items-center gap-2">
-                            Amazon Listing
-                            {fulfillmentToggle}
-                            <div className="mx-2 h-4 w-px bg-border"></div>
-                            <div className="flex items-center gap-1.5 ml-1">
-                              {statusBadge(idea.amazonListing?.listingStatus || "ready", listingStatusLabels)}
-                              {((NEXT_STATUS as any)[idea.amazonListing?.listingStatus || "ready"] || []).map((opt: any) => (
-                                <Button key={opt.next} size="sm" className={`h-6 px-2 text-[10px] text-white ${opt.className}`}
-                                  onClick={() => handleListingStatusChange("amazon", opt.next)} disabled={saving}>{opt.label}</Button>
-                              ))}
-                            </div>
-                          </CardTitle>
-                          <div className="flex items-center gap-2">
-                            {role !== "employee" && <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setEditOpen(true)}><Pencil className="h-3.5 w-3.5 mr-1.5" /> Sửa</Button>}
-                          </div>
-                        </CardHeader>
-                        <CardContent className="text-sm pt-2">
-                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                      <div className="text-sm">
+                          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
 
                             {/* ─── LEFT COLUMN: INFORMATION & GALLERY & PREMIUM CONTENT ─── */}
-                            <div className="space-y-6">
+                            <div className="space-y-6 lg:col-span-2">
                               {/* INFORMATION */}
-                              <div className="space-y-3">
-                                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Information</span>
+                              <div className="bg-card rounded-lg border shadow-sm p-4 space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Information</h3>
+                                  {role !== "employee" && (
+                                    <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => setEditOpen(true)}>
+                                      <Pencil className="h-3 w-3 mr-1" /> Sửa
+                                    </Button>
+                                  )}
+                                </div>
 
                                 <div className="space-y-2">
-                                  {/* Row 1: Selling Account & Price */}
-                                  <div className="grid grid-cols-2 gap-2">
-                                    <div className="group/acc flex flex-col justify-center rounded-md bg-muted/40 px-2.5 py-1.5 border border-transparent hover:border-border/50 transition-colors">
-                                      <span className="text-[10px] text-muted-foreground block mb-0.5">Selling Account</span>
-                                      <span className="text-xs font-medium line-clamp-1">
+                                  {/* Row 1: Selling Account, Fulfillment, Status */}
+                                  <div className="grid grid-cols-3 gap-2">
+                                    <div className="group/acc flex flex-col justify-center rounded-md bg-muted/40 px-2.5 py-1.5 border border-transparent hover:border-border/50 transition-colors min-w-0">
+                                      <span className="text-[10px] text-muted-foreground block mb-0.5 shrink-0">Selling Account</span>
+                                      <span className="text-xs font-medium truncate">
                                         {sellingAccounts.find(a => a.id === idea.amazonListing?.sellingAccountId)?.name || "—"}
                                       </span>
                                     </div>
-                                    <div className="group/price flex flex-col justify-center rounded-md bg-muted/40 px-2.5 py-1.5 border border-transparent hover:border-border/50 transition-colors">
-                                      <span className="text-[10px] text-muted-foreground block mb-0.5">Price</span>
-                                      <span className="text-xs font-medium">${idea.amazonListing?.price || "—"}</span>
+                                    <div className="group/ffm flex flex-col justify-center rounded-md bg-muted/40 px-2.5 py-1.5 border border-transparent hover:border-border/50 transition-colors min-w-0">
+                                      <span className="text-[10px] text-muted-foreground block mb-0.5 shrink-0">Fulfillment</span>
+                                      <div className="flex items-center gap-1 mt-0.5 truncate">
+                                        {fulfillmentToggle}
+                                      </div>
+                                    </div>
+                                    <div className="group/status flex flex-col justify-center rounded-md bg-muted/40 px-2.5 py-1.5 border border-transparent hover:border-border/50 transition-colors min-w-0">
+                                      <span className="text-[10px] text-muted-foreground block mb-0.5 shrink-0">Status</span>
+                                      <div className="flex items-center gap-1.5 mt-0.5 overflow-x-auto scrollbar-hide pb-0.5 -mb-0.5">
+                                        <div className="shrink-0">{statusBadge(idea.amazonListing?.listingStatus || "ready", listingStatusLabels)}</div>
+                                        {((NEXT_STATUS as any)[idea.amazonListing?.listingStatus || "ready"] || []).map((opt: any) => (
+                                          <Button key={opt.next} size="sm" className={`h-6 px-2 text-[10px] text-white shrink-0 ${opt.className}`}
+                                            onClick={() => handleListingStatusChange("amazon", opt.next)} disabled={saving}>{opt.label}</Button>
+                                        ))}
+                                      </div>
                                     </div>
                                   </div>
 
-                                  {/* Row 2: SKU & ASIN */}
-                                  <div className="grid grid-cols-2 gap-2">
-                                    <div className="group/sku flex flex-col justify-center rounded-md bg-muted/40 px-2.5 py-1.5 border border-transparent hover:border-border/50 transition-colors">
-                                      <span className="text-[10px] text-muted-foreground block mb-0.5">SKU</span>
-                                      <div className="flex items-center justify-between">
+                                  {/* Row 2: SKU, ASIN, Price */}
+                                  <div className="grid grid-cols-3 gap-2">
+                                    <div className="group/sku flex flex-col justify-center rounded-md bg-muted/40 px-2.5 py-1.5 border border-transparent hover:border-border/50 transition-colors min-w-0">
+                                      <span className="text-[10px] text-muted-foreground block mb-0.5 shrink-0">SKU</span>
+                                      <div className="flex items-center justify-between min-w-0">
                                         <span className="text-xs font-mono font-medium truncate">{idea.amazonListing?.sku || idea.sku || "—"}</span>
-                                        {(idea.amazonListing?.sku || idea.sku) && <CopyButton text={idea.amazonListing?.sku || idea.sku} className="shrink-0 h-4 w-4 opacity-0 group-hover/sku:opacity-100 transition-opacity" />}
+                                        {(idea.amazonListing?.sku || idea.sku) && <CopyButton text={idea.amazonListing?.sku || idea.sku} className="shrink-0 h-4 w-4 opacity-0 group-hover/sku:opacity-100 transition-opacity ml-1" />}
                                       </div>
                                     </div>
-                                    <div className="group/asin flex flex-col justify-center rounded-md bg-muted/40 px-2.5 py-1.5 border border-transparent hover:border-border/50 transition-colors">
-                                      <span className="text-[10px] text-muted-foreground block mb-0.5">ASIN</span>
-                                      <div className="flex items-center justify-between">
+                                    <div className="group/asin flex flex-col justify-center rounded-md bg-muted/40 px-2.5 py-1.5 border border-transparent hover:border-border/50 transition-colors min-w-0">
+                                      <span className="text-[10px] text-muted-foreground block mb-0.5 shrink-0">ASIN</span>
+                                      <div className="flex items-center justify-between min-w-0">
                                         <span className="text-xs font-mono font-medium truncate">{idea.amazonListing?.asin || "—"}</span>
                                         {idea.amazonListing?.asin && (
-                                          <div className="flex items-center gap-1 opacity-0 group-hover/asin:opacity-100 transition-opacity">
+                                          <div className="flex items-center gap-1 opacity-0 group-hover/asin:opacity-100 transition-opacity shrink-0 ml-1">
                                             <a href={`https://www.amazon.com/dp/${idea.amazonListing.asin}`} target="_blank" rel="noopener noreferrer" className="h-4 w-4 flex items-center justify-center text-blue-600 hover:bg-blue-50 rounded"><ExternalLink className="h-3 w-3" /></a>
                                             <CopyButton text={idea.amazonListing.asin} className="h-4 w-4" />
                                           </div>
                                         )}
                                       </div>
                                     </div>
-                                  </div>
-
-                                  {/* Row 3: Vine Status & Auto Campaign */}
-                                  <div className="grid grid-cols-2 gap-2">
-                                    <div className="group/vine flex flex-col justify-center rounded-md bg-muted/40 px-2.5 py-1.5 border border-transparent hover:border-border/50 transition-colors">
-                                      <span className="text-[10px] text-muted-foreground block mb-0.5">Vine Status</span>
-                                      <span className={`text-xs font-medium truncate ${idea.amazonListing?.vineStatus === 'not_enrolled' ? 'text-muted-foreground' : 'text-blue-700'
-                                        }`}>
-                                        {idea.amazonListing?.vineStatus === 'enrolled' ? 'Enrolled' : idea.amazonListing?.vineStatus === 'reviewing' ? 'Reviewing' : idea.amazonListing?.vineStatus === 'completed' ? 'Completed' : 'Not Enrolled'}
-                                      </span>
-                                    </div>
-                                    <div className="group/camp flex flex-col justify-center rounded-md bg-muted/40 px-2.5 py-1.5 border border-transparent hover:border-border/50 transition-colors">
-                                      <span className="text-[10px] text-muted-foreground block mb-0.5">Auto Campaign</span>
-                                      <span className="text-xs font-medium">
-                                        {idea.amazonListing?.campAuto ? "✅ Đã bật" : "❌ Tắt"}
-                                      </span>
+                                    <div className="group/price flex flex-col justify-center rounded-md bg-muted/40 px-2.5 py-1.5 border border-transparent hover:border-border/50 transition-colors min-w-0">
+                                      <span className="text-[10px] text-muted-foreground block mb-0.5 shrink-0">Price</span>
+                                      <span className="text-xs font-medium truncate">${idea.amazonListing?.price || "—"}</span>
                                     </div>
                                   </div>
 
-                                  {/* Row 4: FNSKU & Print Label combined */}
-                                  <div className="group/fnsku flex items-center justify-between rounded-md bg-muted/40 p-2 border border-transparent hover:border-border/50 transition-colors">
-                                    <div className="flex items-center gap-3">
-                                      {/* Thumbnail */}
-                                      {idea.amazonListing?.fnskuLabelFileUrl ? (
-                                        <Dialog>
-                                          <DialogTrigger asChild>
-                                            <div className="shrink-0 w-12 h-8 rounded border bg-white cursor-pointer hover:ring-2 hover:ring-primary/50 overflow-hidden">
-                                              <img src={convertToDirectImageUrl(idea.amazonListing.fnskuLabelFileUrl) || idea.amazonListing.fnskuLabelFileUrl} alt="Label" className="w-full h-full object-contain" />
-                                            </div>
-                                          </DialogTrigger>
-                                          <DialogContent className="max-w-[90vw] sm:max-w-[90vw] max-h-[90vh] bg-transparent border-none shadow-none !ring-0 p-0" showCloseButton={false}>
-                                            <img src={convertToDirectImageUrl(idea.amazonListing.fnskuLabelFileUrl) || idea.amazonListing.fnskuLabelFileUrl} alt="Label" className="max-w-[90vw] max-h-[90vh] object-contain rounded-md" />
-                                          </DialogContent>
-                                        </Dialog>
-                                      ) : (
-                                        <div className="shrink-0 w-12 h-8 rounded border bg-muted/50 flex items-center justify-center">
-                                          <span className="text-[8px] text-muted-foreground">No Label</span>
+                                  {/* Row 3: Vine & Auto Camp (Combined), FNSKU */}
+                                  <div className="grid grid-cols-3 gap-2">
+                                    <div className="group/vine-camp flex flex-col justify-center gap-1.5 rounded-md bg-muted/40 px-2.5 py-1.5 border border-transparent hover:border-border/50 transition-colors min-w-0">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-[10px] text-muted-foreground shrink-0">Vine Status</span>
+                                        <span className={`text-[11px] font-medium truncate ml-2 ${idea.amazonListing?.vineStatus === 'not_enrolled' ? 'text-muted-foreground' : 'text-blue-700'}`}>
+                                          {idea.amazonListing?.vineStatus === 'enrolled' ? 'Enrolled' : idea.amazonListing?.vineStatus === 'reviewing' ? 'Reviewing' : idea.amazonListing?.vineStatus === 'completed' ? 'Completed' : 'Not Enrolled'}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-[10px] text-muted-foreground shrink-0">Auto Camp</span>
+                                        <span className="text-[11px] font-medium truncate ml-2">
+                                          {idea.amazonListing?.campAuto ? "✅ Đã bật" : "❌ Tắt"}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <div className="col-span-2 group/fnsku flex items-center justify-between rounded-md bg-muted/40 px-2.5 py-1.5 border border-transparent hover:border-border/50 transition-colors min-w-0">
+                                      <div className="flex items-center gap-3 min-w-0">
+                                        {/* Thumbnail */}
+                                        {idea.amazonListing?.fnskuLabelFileUrl ? (
+                                          <Dialog>
+                                            <DialogTrigger asChild>
+                                              <div className="shrink-0 w-12 h-8 rounded border bg-white cursor-pointer hover:ring-2 hover:ring-primary/50 overflow-hidden">
+                                                <img src={convertToDirectImageUrl(idea.amazonListing.fnskuLabelFileUrl) || idea.amazonListing.fnskuLabelFileUrl} alt="Label" className="w-full h-full object-contain" />
+                                              </div>
+                                            </DialogTrigger>
+                                            <DialogContent className="max-w-[90vw] sm:max-w-[90vw] max-h-[90vh] bg-transparent border-none shadow-none !ring-0 p-0" showCloseButton={false}>
+                                              <img src={convertToDirectImageUrl(idea.amazonListing.fnskuLabelFileUrl) || idea.amazonListing.fnskuLabelFileUrl} alt="Label" className="max-w-[90vw] max-h-[90vh] object-contain rounded-md" />
+                                            </DialogContent>
+                                          </Dialog>
+                                        ) : (
+                                          <div className="shrink-0 w-12 h-8 rounded border bg-muted/50 flex items-center justify-center">
+                                            <span className="text-[8px] text-muted-foreground">No Label</span>
+                                          </div>
+                                        )}
+
+                                        <div className="flex flex-col">
+                                          <span className="text-[10px] text-muted-foreground">FNSKU</span>
+                                          <div className="flex items-center gap-1">
+                                            <span className="text-xs font-mono font-medium">{idea.amazonListing?.fnskuCode || "—"}</span>
+                                            {idea.amazonListing?.fnskuCode && <CopyButton text={idea.amazonListing.fnskuCode} className="h-3 w-3 opacity-0 group-hover/fnsku:opacity-100 transition-opacity" />}
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* Print Controls */}
+                                      {idea.amazonListing?.fnskuCode && idea.amazonListing?.fnskuLabelFileUrl && (
+                                        <div className="flex items-center gap-2">
+                                          <div className="flex items-center gap-1">
+                                            <Label className="text-[10px] text-muted-foreground shrink-0">SL:</Label>
+                                            <Input
+                                              type="number" min={1} max={99}
+                                              className="w-12 h-7 text-xs text-center px-1"
+                                              value={labelPrintQty}
+                                              onChange={(e) => setLabelPrintQty(Math.max(1, parseInt(e.target.value) || 1))}
+                                            />
+                                          </div>
+                                          <Button size="sm" className="h-7 text-xs gap-1" onClick={() => {
+                                            const li = convertToDirectImageUrl(idea.amazonListing?.fnskuLabelFileUrl || "") || idea.amazonListing?.fnskuLabelFileUrl;
+                                            const w = window.open("", "_blank", "width=600,height=400");
+                                            if (w) {
+                                              const imgs = Array(labelPrintQty).fill(`<img src="${li}" alt="Label" onerror="this.remove()">`).join("");
+                                              w.document.write('<!DOCTYPE html><html><head><title>Label</title>' +
+                                                '<style>' +
+                                                '@page{size:5cm 3cm;margin:0}' +
+                                                '@media print{html,body{margin:0;padding:0}img{page-break-after:always}}' +
+                                                'body{margin:0;padding:0;background:#fff;display:flex;flex-direction:column;align-items:center}' +
+                                                'img{display:block;width:5cm;height:3cm;object-fit:contain}' +
+                                                '</style></head><body>' + imgs + '<script>' +
+                                                'var all=document.querySelectorAll("img"),n=all.length,ok=0;' +
+                                                'if(n===0){window.print();window.close()}' +
+                                                'all.forEach(function(img){img.onload=function(){ok++;if(ok===n)setTimeout(function(){window.print();window.close()},300)};' +
+                                                'img.onerror=function(){img.remove();ok++;if(ok===n)setTimeout(function(){window.print();window.close()},300)}});' +
+                                                '<' + '/script></body></html>');
+                                              w.document.close();
+                                            }
+                                          }}>
+                                            <Printer className="h-3 w-3" /> In
+                                          </Button>
                                         </div>
                                       )}
-
-                                      <div className="flex flex-col">
-                                        <span className="text-[10px] text-muted-foreground">FNSKU</span>
-                                        <div className="flex items-center gap-1">
-                                          <span className="text-xs font-mono font-medium">{idea.amazonListing?.fnskuCode || "—"}</span>
-                                          {idea.amazonListing?.fnskuCode && <CopyButton text={idea.amazonListing.fnskuCode} className="h-3 w-3 opacity-0 group-hover/fnsku:opacity-100 transition-opacity" />}
-                                        </div>
-                                      </div>
                                     </div>
-
-                                    {/* Print Controls */}
-                                    {idea.amazonListing?.fnskuCode && idea.amazonListing?.fnskuLabelFileUrl && (
-                                      <div className="flex items-center gap-2">
-                                        <div className="flex items-center gap-1">
-                                          <Label className="text-[10px] text-muted-foreground shrink-0">SL:</Label>
-                                          <Input
-                                            type="number" min={1} max={99}
-                                            className="w-12 h-7 text-xs text-center px-1"
-                                            value={labelPrintQty}
-                                            onChange={(e) => setLabelPrintQty(Math.max(1, parseInt(e.target.value) || 1))}
-                                          />
-                                        </div>
-                                        <Button size="sm" className="h-7 text-xs gap-1" onClick={() => {
-                                          const li = convertToDirectImageUrl(idea.amazonListing?.fnskuLabelFileUrl || "") || idea.amazonListing?.fnskuLabelFileUrl;
-                                          const w = window.open("", "_blank", "width=600,height=400");
-                                          if (w) {
-                                            const imgs = Array(labelPrintQty).fill(`<img src="${li}" alt="Label" onerror="this.remove()">`).join("");
-                                            w.document.write('<!DOCTYPE html><html><head><title>Label</title>' +
-                                              '<style>' +
-                                              '@page{size:5cm 3cm;margin:0}' +
-                                              '@media print{html,body{margin:0;padding:0}img{page-break-after:always}}' +
-                                              'body{margin:0;padding:0;background:#fff;display:flex;flex-direction:column;align-items:center}' +
-                                              'img{display:block;width:5cm;height:3cm;object-fit:contain}' +
-                                              '</style></head><body>' + imgs + '<script>' +
-                                              'var all=document.querySelectorAll("img"),n=all.length,ok=0;' +
-                                              'if(n===0){window.print();window.close()}' +
-                                              'all.forEach(function(img){img.onload=function(){ok++;if(ok===n)setTimeout(function(){window.print();window.close()},300)};' +
-                                              'img.onerror=function(){img.remove();ok++;if(ok===n)setTimeout(function(){window.print();window.close()},300)}});' +
-                                              '<' + '/script></body></html>');
-                                            w.document.close();
-                                          }
-                                        }}>
-                                          <Printer className="h-3 w-3" /> In
-                                        </Button>
-                                      </div>
-                                    )}
                                   </div>
 
                                 </div>
                               </div>
 
-                              <Separator />
-
                               {/* GALLERY */}
-                              <div className="pb-2">
+                              <div className="bg-card rounded-lg border shadow-sm p-4">
 <PhotoGallery
         platform="amazon"
         listing={idea.amazonListing}
@@ -258,11 +260,16 @@ export function AmazonListingTab({
       />
                               </div>
 
-                              <Separator />
-
                               {/* PREMIUM CONTENT */}
-                              <div className="space-y-3 pb-2">
-                                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Premium Content</span>
+                              <div className="bg-card rounded-lg border shadow-sm p-4 space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Premium Content</h3>
+                                  {role !== "employee" && (
+                                    <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => setEditOpen(true)}>
+                                      <Pencil className="h-3 w-3 mr-1" /> Sửa
+                                    </Button>
+                                  )}
+                                </div>
                                 <div className="space-y-2">
                                   <div className="grid grid-cols-2 gap-2">
                                     <div className="group/video rounded-md bg-muted/40 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative flex flex-col justify-center">
@@ -286,31 +293,46 @@ export function AmazonListingTab({
                             </div>
 
                             {/* ─── RIGHT COLUMN: CONTENT ─── */}
-                            <div className="space-y-3 lg:col-span-2">
-                              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Content</span>
-
-                              <div className="group/iname flex flex-col justify-center rounded-md bg-muted/40 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative">
-                                <div className="flex items-center gap-2 mb-1"><span className="text-[10px] text-muted-foreground block">Title (Item Name)</span><Badge variant="outline" className="text-[9px] font-mono font-medium h-4 px-1.5 border-primary/20 bg-primary/5 text-primary/70">75 ký tự max</Badge></div>
-                                <span className="text-sm font-medium pr-6">{idea.amazonListing?.itemName || "—"}</span>
-                                {idea.amazonListing?.itemName && <CopyButton text={idea.amazonListing.itemName} className="absolute right-2 top-2 h-5 w-5 opacity-0 group-hover/iname:opacity-100 transition-opacity bg-background" />}
+                            <div className="bg-card rounded-lg border shadow-sm p-4 space-y-3 lg:col-span-3 h-fit">
+                              <div className="flex items-center justify-between">
+                                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Content</h3>
+                                {role !== "employee" && (
+                                  <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => setEditOpen(true)}>
+                                    <Pencil className="h-3 w-3 mr-1" /> Sửa
+                                  </Button>
+                                )}
                               </div>
 
-                              <div className="group/ihigh flex flex-col justify-center rounded-md bg-muted/40 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative">
-                                <div className="flex items-center gap-2 mb-1"><span className="text-[10px] text-muted-foreground block">Item Highlights</span><Badge variant="outline" className="text-[9px] font-mono font-medium h-4 px-1.5 border-primary/20 bg-primary/5 text-primary/70">125 ký tự max</Badge></div>
-                                <span className="text-xs pr-6">{idea.amazonListing?.itemHighlights || "—"}</span>
-                                {idea.amazonListing?.itemHighlights && <CopyButton text={idea.amazonListing.itemHighlights} className="absolute right-2 top-2 h-5 w-5 opacity-0 group-hover/ihigh:opacity-100 transition-opacity bg-background" />}
+                              <div className="grid grid-cols-2 gap-3">
+                                <div className="group/iname flex flex-col justify-center rounded-md bg-muted/40 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative">
+                                  <div className="flex items-center gap-2 mb-1"><span className="text-[10px] text-muted-foreground block">Title (Item Name)</span><Badge variant="outline" className="text-[9px] font-mono font-medium h-4 px-1.5 border-primary/20 bg-primary/5 text-primary/70">75 ký tự max</Badge></div>
+                                  <span className="text-xs font-medium pr-6">{idea.amazonListing?.itemName || "—"}</span>
+                                  {idea.amazonListing?.itemName && <CopyButton text={idea.amazonListing.itemName} className="absolute right-2 top-2 h-5 w-5 opacity-0 group-hover/iname:opacity-100 transition-opacity bg-background" />}
+                                </div>
+
+                                <div className="group/ihigh flex flex-col justify-center rounded-md bg-muted/40 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative">
+                                  <div className="flex items-center gap-2 mb-1"><span className="text-[10px] text-muted-foreground block">Item Highlights</span><Badge variant="outline" className="text-[9px] font-mono font-medium h-4 px-1.5 border-primary/20 bg-primary/5 text-primary/70">125 ký tự max</Badge></div>
+                                  <span className="text-xs font-medium pr-6">{idea.amazonListing?.itemHighlights || "—"}</span>
+                                  {idea.amazonListing?.itemHighlights && <CopyButton text={idea.amazonListing.itemHighlights} className="absolute right-2 top-2 h-5 w-5 opacity-0 group-hover/ihigh:opacity-100 transition-opacity bg-background" />}
+                                </div>
                               </div>
 
                               <div className="group/idesc flex flex-col rounded-md bg-muted/40 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative">
                                 <div className="flex items-center gap-2 mb-1.5"><span className="text-[10px] text-muted-foreground block">Description</span><Badge variant="outline" className="text-[9px] font-mono font-medium h-4 px-1.5 border-primary/20 bg-primary/5 text-primary/70">500 - 2000 ký tự</Badge></div>
-                                <div className="text-xs whitespace-pre-wrap text-muted-foreground pr-6 max-h-32 overflow-y-auto custom-scrollbar">
+                                <div className="text-xs whitespace-pre-wrap text-muted-foreground pr-6">
                                   {idea.amazonListing?.description || "—"}
                                 </div>
                                 {idea.amazonListing?.description && <CopyButton text={idea.amazonListing.description} className="absolute right-2 top-2 h-5 w-5 opacity-0 group-hover/idesc:opacity-100 transition-opacity bg-background" />}
                               </div>
 
                               <div className="space-y-1.5">
-                                <div className="flex items-center gap-2 px-1"><span className="text-[10px] text-muted-foreground block">Bullet Points</span><Badge variant="outline" className="text-[9px] font-mono font-medium h-4 px-1.5 border-primary/20 bg-primary/5 text-primary/70">5 bullets, 255 ký tự max/bullet</Badge></div>
+                                <div className="flex items-center justify-between px-1 mb-1.5">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[10px] text-muted-foreground block">Bullet Points</span>
+                                    <Badge variant="outline" className="text-[9px] font-mono font-medium h-4 px-1.5 border-primary/20 bg-primary/5 text-primary/70">5 bullets, 255 ký tự max/bullet</Badge>
+                                  </div>
+                                  <Button variant="outline" size="sm" className="h-5 text-[9px] px-2 py-0" onClick={() => { try { const bps = JSON.parse(idea.amazonListing?.bulletPoints || "[]").filter(Boolean); if (bps.length > 0) { navigator.clipboard.writeText(bps.join("\n")); toast.success("Đã copy toàn bộ Bullets"); } } catch {} }}><Copy className="h-3 w-3 mr-1" /> Copy tất cả</Button>
+                                </div>
                                 {(() => {
                                   try {
                                     const bps = JSON.parse(idea.amazonListing?.bulletPoints || "[]").filter(Boolean);
@@ -324,9 +346,6 @@ export function AmazonListingTab({
                                             <CopyButton text={bp} className="absolute right-2 top-2 h-5 w-5 opacity-0 group-hover/bp:opacity-100 transition-opacity bg-background" />
                                           </div>
                                         ))}
-                                        <div className="flex justify-end pt-1">
-                                          <Button variant="outline" size="sm" className="h-6 text-[10px] px-2 py-1" onClick={() => { navigator.clipboard.writeText(bps.join("\n")); toast.success("Đã copy toàn bộ Bullets"); }}><Copy className="h-3 w-3 mr-1.5" /> Copy toàn bộ Bullets</Button>
-                                        </div>
                                       </div>
                                     );
                                   } catch { return <p className="text-xs text-muted-foreground px-1">—</p>; }
@@ -340,7 +359,7 @@ export function AmazonListingTab({
                                     const tags = (idea.amazonListing?.tags || "").split(";").filter(Boolean);
                                     if (tags.length === 0) return <p className="text-xs text-muted-foreground">—</p>;
                                     return (
-                                      <div className="flex flex-wrap gap-1 pr-6 max-h-24 overflow-y-auto custom-scrollbar content-start">
+                                      <div className="flex flex-wrap gap-1 pr-6 content-start">
                                         {tags.map((t: string, i: number) =>
                                           <Badge key={i} variant="secondary" className="text-xs py-1 px-2.5 font-normal group/tag flex items-center shrink-0 overflow-hidden transition-all duration-300">
                                             <span>{t.trim()}</span>
@@ -361,7 +380,7 @@ export function AmazonListingTab({
                                     const slugs = (idea.amazonListing?.slugs || "").split("\n").filter(Boolean);
                                     if (slugs.length === 0) return <p className="text-xs text-muted-foreground">—</p>;
                                     return (
-                                      <div className="flex flex-col gap-1 pr-6 max-h-24 overflow-y-auto custom-scrollbar">
+                                      <div className="flex flex-col gap-1 pr-6">
                                         {slugs.map((s: string, i: number) => <code key={i} className="text-[10px] bg-muted px-1.5 py-0.5 rounded truncate">{s}</code>)}
                                         <CopyButton text={idea.amazonListing?.slugs || ""} className="absolute right-2 top-2 h-5 w-5 opacity-0 group-hover/islug:opacity-100 transition-opacity bg-background" />
                                       </div>
@@ -372,8 +391,7 @@ export function AmazonListingTab({
 
                             </div>
                           </div>
-                        </CardContent>
-                      </Card>
+                      </div>
                     
 
                   {/* ─── Etsy Tab ─── */}

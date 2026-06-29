@@ -40,7 +40,7 @@ export async function PUT(
       galleryImages,
       videoUrl,
       contentAPlusUrl,
-      listingStatus,
+      listingStatus: incomingListingStatus,
       listingStatusReason,
       vineStatus,
       photosUploaded,
@@ -59,6 +59,41 @@ export async function PUT(
         { error: "Dữ liệu Amazon đã được cập nhật bởi người khác. Vui lòng tải lại trang." },
         { status: 409 }
       );
+    }
+
+    let listingStatus = incomingListingStatus;
+    if (listingStatus === undefined) {
+      const currentStatus = existing?.listingStatus || "not_ready";
+      if (currentStatus === "not_ready") {
+        const finalTitle = itemName ?? existing?.itemName;
+        const finalHighlights = itemHighlights ?? existing?.itemHighlights;
+        const finalDesc = description ?? existing?.description;
+        const finalTags = tags ?? existing?.tags;
+        const finalSlugs = slugs ?? existing?.slugs;
+        
+        let finalBullets = [];
+        if (bulletPoints !== undefined) finalBullets = bulletPoints || [];
+        else if (existing?.bulletPoints) { try { finalBullets = JSON.parse(existing.bulletPoints); } catch {} }
+        const validBullets = finalBullets.filter((b: string) => b && b.trim());
+
+        let finalGallery = [];
+        if (galleryImages !== undefined) finalGallery = galleryImages || [];
+        else if (existing?.galleryImages) { try { finalGallery = JSON.parse(existing.galleryImages); } catch {} }
+        const validGallery = finalGallery.filter((g: string) => g && g.trim());
+
+        const isComplete = 
+          finalTitle?.trim() && 
+          finalHighlights?.trim() && 
+          finalDesc?.trim() && 
+          validBullets.length >= 5 && 
+          finalTags?.trim() && 
+          finalSlugs?.trim() && 
+          validGallery.length >= 9;
+
+        if (isComplete) {
+          listingStatus = "ready";
+        }
+      }
     }
 
     // Track audit changes
@@ -100,7 +135,7 @@ export async function PUT(
       if (validBullets.length < 5) missing.push(`Bullet Points (${validBullets.length}/5)`);
       if (!finalTags?.trim()) missing.push("Tags");
       if (!finalSlugs?.trim()) missing.push("Slug");
-      if (validGallery.length < 9 && !finalSharedMain) missing.push(`Ảnh (${validGallery.length}/9)`);
+      if (validGallery.length < 9) missing.push(`Ảnh (${validGallery.length}/9)`);
 
       if (missing.length > 0) {
         return NextResponse.json({ error: "Sản phẩm chưa đủ điều kiện up! Thiếu: " + missing.join(", ") }, { status: 400 });

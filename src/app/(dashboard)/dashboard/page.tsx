@@ -85,7 +85,7 @@ export default async function DashboardPage() {
     { title: "Chờ xem xét", value: stats.reviewing, icon: Lightbulb, href: "/ideas?tab=reviewing", color: "text-amber-600", bgColor: "bg-amber-50 dark:bg-amber-950/30" },
     { title: "Chờ làm ảnh", value: stats.awaitingPhotos, icon: Image, href: "/ideas?tab=photos", color: "text-blue-600", bgColor: "bg-blue-50 dark:bg-blue-950/30" },
     { title: "Sẵn sàng đăng", value: stats.photoApproved, icon: CheckCircle, href: "/ideas?tab=ready", color: "text-green-600", bgColor: "bg-green-50 dark:bg-green-950/30" },
-    { title: "Đã đăng bán", value: stats.published, icon: Upload, href: "/ideas?tab=published", color: "text-primary", bgColor: "bg-primary/5" },
+    { title: "Đang bán", value: stats.published, icon: Upload, href: "/ideas?tab=published", color: "text-primary", bgColor: "bg-primary/5" },
   ];
 
   const operationCards = [
