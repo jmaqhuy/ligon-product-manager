@@ -49,7 +49,29 @@ export async function GET(
       return NextResponse.json({ error: "Không tìm thấy ý tưởng" }, { status: 404 });
     }
 
-    return NextResponse.json(idea);
+    let internalSourceIdeas: { id: string; msku: string }[] = [];
+    if (idea.sourceLinks) {
+      try {
+        const links = JSON.parse(idea.sourceLinks) as string[];
+        const internalIds = links
+          .filter(l => l.startsWith("internal:"))
+          .map(l => l.substring(9));
+        
+        if (internalIds.length > 0) {
+          internalSourceIdeas = await db.idea.findMany({
+            where: { id: { in: internalIds } },
+            select: { id: true, msku: true }
+          });
+        }
+      } catch (e) {
+        // ignore parse error
+      }
+    }
+
+    return NextResponse.json({
+      ...idea,
+      internalSourceIdeas
+    });
   } catch (error) {
     console.error("GET /api/ideas/[id] error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -101,14 +123,14 @@ export async function PATCH(
       }
       auditEntries.push({ field: "status", oldVal: idea.status, newVal: body.status });
       updateData.status = body.status;
-      
+
       if (body.fulfillmentType) {
         await db.amazonListing.update({
           where: { ideaId: id },
           data: { fulfillmentType: body.fulfillmentType }
         });
       }
-      
+
       // If approved or rejected, typically needsReReview is cleared
       if (body.status === "approved" || body.status === "rejected") {
         updateData.needsReReview = false;
@@ -277,7 +299,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const { id } = await params;
-    
+
     const idea = await db.idea.findUnique({
       where: { id },
       include: {
@@ -292,18 +314,18 @@ export async function DELETE(
     }
 
     const role = session.user.role;
-    
+
     // Global check: cannot delete if already in production
-    const inProduction = 
+    const inProduction =
       idea.amazonListing?.listingStatus === "published" ||
       idea.etsyListing?.listingStatus === "published" ||
-      idea.fileStatus === "approved" || 
-      !!idea.designFileUrl || 
+      idea.fileStatus === "approved" ||
+      !!idea.designFileUrl ||
       idea.productionRequests.length > 0;
 
     if (inProduction) {
       return NextResponse.json(
-        { 
+        {
           error: "Không thể xoá ý tưởng.",
           details: ["Ý tưởng này đã được duyệt thiết kế, đăng bán hoặc đang trong quá trình sản xuất."],
           action: {
@@ -319,10 +341,10 @@ export async function DELETE(
     if (role === "employee") {
       if (idea.createdById !== session.user.id) {
         return NextResponse.json(
-          { 
+          {
             error: "Không thể xoá ý tưởng.",
             details: ["Bạn chỉ được phép xoá ý tưởng do chính mình tạo ra."]
-          }, 
+          },
           { status: 403 }
         );
       }
@@ -330,7 +352,7 @@ export async function DELETE(
 
     // Boss/Manager can delete without condition, but client handles warnings.
     // Proceed to delete
-    
+
     await db.$transaction(async (tx) => {
       // Delete child relations
       if (idea.amazonListing) {
@@ -346,13 +368,13 @@ export async function DELETE(
         }
         await tx.productionRequest.deleteMany({ where: { ideaId: id } });
       }
-      
+
       // Delete ShipmentItems referencing this idea (cascades to ShipmentBoxItems)
       await tx.shipmentItem.deleteMany({ where: { ideaId: id } });
-      
+
       // Delete audit logs associated
       await tx.auditLog.deleteMany({ where: { entityType: "idea", entityId: id } });
-      
+
       // Finally delete the idea
       await tx.idea.delete({ where: { id } });
     });

@@ -76,7 +76,7 @@ export async function PUT(
       }
     }
 
-    if (listingStatus === "selling") {
+    if (listingStatus === "published") {
       const finalListingId = listingId ?? existing?.listingId;
       if (!finalListingId) {
         return NextResponse.json({ error: "Vui lòng nhập Listing ID trước khi chuyển sang 'Đã lên'!" }, { status: 400 });

@@ -128,7 +128,7 @@ function getStatusDotColor(status?: string) {
   if (status === "ready" || status === "fixed") return "bg-emerald-500 animate-pulse";
   if (status === "published") return "bg-emerald-500";
   if (status === "uploading") return "bg-amber-500 animate-pulse";
-  if (status === "error") return "bg-red-500";
+  if (status === "error") return "bg-red-500 animate-pulse";
   if (status === "delisted") return "bg-red-700";
   return "bg-gray-400";
 }
@@ -137,15 +137,15 @@ function getStatusDotColor(status?: string) {
 const NEXT_STATUS: Record<string, { label: string; next: string; className: string }[]> = {
   ready: [{ label: "Đang up", next: "uploading", className: "bg-cyan-600 hover:bg-cyan-700" }],
   uploading: [
-    { label: "Đã lên", next: "selling", className: "bg-green-600 hover:bg-green-700" },
+    { label: "Đã lên", next: "published", className: "bg-green-600 hover:bg-green-700" },
     { label: "Lỗi", next: "error", className: "bg-red-600 hover:bg-red-700" },
   ],
-  selling: [
+  published: [
     { label: "Bị gỡ", next: "delisted", className: "bg-red-600 hover:bg-red-700" },
     { label: "Lỗi", next: "error", className: "bg-orange-600 hover:bg-orange-700" },
   ],
   error: [{ label: "Đã sửa", next: "fixed", className: "bg-emerald-600 hover:bg-emerald-700" }],
-  fixed: [{ label: "Đã lên", next: "selling", className: "bg-green-600 hover:bg-green-700" }],
+  fixed: [{ label: "Đã lên", next: "published", className: "bg-green-600 hover:bg-green-700" }],
   delisted: [],
 };
 
@@ -169,16 +169,16 @@ export default function IdeaDetailPage() {
   // Sheets
   const [historyOpen, setHistoryOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-      const [changeFulfillmentOpen, setChangeFulfillmentOpen] = useState(false);
+  const [changeFulfillmentOpen, setChangeFulfillmentOpen] = useState(false);
   const [pendingFulfillment, setPendingFulfillment] = useState<"FBM" | "FBA" | null>(null);
 
   // Idea general form state — only prompt (title/description belong to Amazon/Etsy)
   const [ideaForm, setIdeaForm] = useState({ prompt: "" });
 
   // Amazon listing form state
-  
+
   // Etsy listing form state
-  
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [sellingAccounts, setSellingAccounts] = useState<any[]>([]);
 
@@ -278,8 +278,8 @@ export default function IdeaDetailPage() {
     finally { setSaving(false); setChangeFulfillmentOpen(false); setPendingFulfillment(null); }
   };
 
-  
-  
+
+
   const handleListingStatusChange = async (platform: "amazon" | "etsy", newStatus: string) => {
     try {
       const res = await fetch(`/api/ideas/${id}/${platform}-listing`, {
@@ -571,30 +571,34 @@ export default function IdeaDetailPage() {
               {/* ── Tabs: Amazon / Etsy ── */}
               <div className="flex-1 overflow-hidden flex flex-col min-h-0">
                 <Tabs defaultValue="amazon" className="flex flex-col flex-1 overflow-hidden">
-                  <div className="flex items-end justify-between shrink-0 border-b border-border mb-4">
-                    <TabsList className="w-fit bg-transparent p-0 h-auto gap-6 rounded-none">
-                      <TabsTrigger 
-                        value="amazon" 
-                        className="rounded-none border-b-2 border-transparent bg-transparent px-1 pb-2.5 text-xs font-semibold text-muted-foreground data-[state=active]:border-blue-600 data-[state=active]:text-foreground data-[state=active]:shadow-none transition-all flex items-center gap-2"
+                  <div className="flex items-end justify-between shrink-0 border-b border-border">
+                    <TabsList className="flex h-auto w-fit bg-transparent p-0 gap-6 rounded-none -mb-px">
+                      <TabsTrigger
+                        value="amazon"
+                        className="rounded-none !border-x-0 !border-t-0 border-b-2 border-transparent !bg-transparent px-2 pb-3 pt-2 text-sm font-semibold text-muted-foreground transition-all flex items-center gap-2 
+                                   data-[state=active]:border-b-blue-600 dark:data-[state=active]:border-b-blue-500 data-[state=active]:text-foreground data-[state=active]:shadow-none outline-none
+                                   hover:text-foreground"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src="https://www.amazon.com/favicon.ico" className="w-3.5 h-3.5 object-contain" alt="Amazon" />
+                        <img src="https://www.amazon.com/favicon.ico" className="w-4 h-4 object-contain shrink-0" alt="Amazon" />
                         <span>Amazon</span>
-                        <span 
-                          className={`w-1.5 h-1.5 rounded-full ${getStatusDotColor(idea.amazonListing?.listingStatus)}`}
-                          title={`Amazon: ${(listingStatusLabels as any)[idea.amazonListing?.listingStatus || "ready"]}`} 
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full shrink-0 ${getStatusDotColor(idea.amazonListing?.listingStatus)}`}
+                          title={`Amazon: ${(listingStatusLabels as any)[idea.amazonListing?.listingStatus || "ready"]}`}
                         />
                       </TabsTrigger>
-                      <TabsTrigger 
-                        value="etsy" 
-                        className="rounded-none border-b-2 border-transparent bg-transparent px-1 pb-2.5 text-xs font-semibold text-muted-foreground data-[state=active]:border-blue-600 data-[state=active]:text-foreground data-[state=active]:shadow-none transition-all flex items-center gap-2"
+                      <TabsTrigger
+                        value="etsy"
+                        className="rounded-none !border-x-0 !border-t-0 border-b-2 border-transparent !bg-transparent px-2 pb-3 pt-2 text-sm font-semibold text-muted-foreground transition-all flex items-center gap-2 
+                                   data-[state=active]:border-b-blue-600 dark:data-[state=active]:border-b-blue-500 data-[state=active]:text-foreground data-[state=active]:shadow-none outline-none
+                                   hover:text-foreground"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src="https://www.etsy.com/favicon.ico" className="w-3.5 h-3.5 object-contain" alt="Etsy" />
+                        <img src="https://www.etsy.com/favicon.ico" className="w-4 h-4 object-contain shrink-0" alt="Etsy" />
                         <span>Etsy</span>
-                        <span 
-                          className={`w-1.5 h-1.5 rounded-full ${getStatusDotColor(idea.etsyListing?.listingStatus)}`}
-                          title={`Etsy: ${(listingStatusLabels as any)[idea.etsyListing?.listingStatus || "ready"]}`} 
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full shrink-0 ${getStatusDotColor(idea.etsyListing?.listingStatus)}`}
+                          title={`Etsy: ${(listingStatusLabels as any)[idea.etsyListing?.listingStatus || "ready"]}`}
                         />
                       </TabsTrigger>
                     </TabsList>
@@ -701,6 +705,22 @@ export default function IdeaDetailPage() {
                   </ButtonIconHover>
                 ) : (
                   sourceLinks.slice(0, 5).map((link, i) => {
+                    if (link.startsWith("internal:")) {
+                      const originalId = link.substring(9);
+                      const originalIdea = idea.internalSourceIdeas?.find((idObj: any) => idObj.id === originalId);
+                      const displayMsku = originalIdea ? originalIdea.msku : "Nội bộ";
+                      return (
+                        <ButtonIconHover
+                          key={i}
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-[10px] bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 shadow-sm hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-full px-3 w-fit"
+                          onClick={() => window.open(`/ideas/${originalId}`, "_blank")}
+                        >
+                          {displayMsku}
+                        </ButtonIconHover>
+                      );
+                    }
                     let domain = link;
                     try { domain = new URL(link).hostname.replace("www.", ""); } catch { }
                     return (
@@ -804,18 +824,18 @@ export default function IdeaDetailPage() {
                   )}
                   {idea.fileStatus === "revision_requested" && idea.fileAssigneeId === session?.user?.id && (
                     <div className="flex flex-col gap-1.5 mt-2">
-                        <Input
-                          placeholder="Cập nhật link file..."
-                          className="h-7 text-xs"
-                          id="update-file-url"
-                          onBlur={(e) => {
-                            if (e.target.value) handleUpdateIdea({ designFileUrl: e.target.value });
-                          }}
-                          defaultValue={idea.designFileUrl || ""}
-                        />
-                        <Button size="sm" className="w-full h-7 text-xs bg-amber-600 hover:bg-amber-700 text-white" onClick={() => handleUpdateIdea({ fileStatus: "pending_approval" })} disabled={saving}>
-                          Nộp lại file đã sửa
-                        </Button>
+                      <Input
+                        placeholder="Cập nhật link file..."
+                        className="h-7 text-xs"
+                        id="update-file-url"
+                        onBlur={(e) => {
+                          if (e.target.value) handleUpdateIdea({ designFileUrl: e.target.value });
+                        }}
+                        defaultValue={idea.designFileUrl || ""}
+                      />
+                      <Button size="sm" className="w-full h-7 text-xs bg-amber-600 hover:bg-amber-700 text-white" onClick={() => handleUpdateIdea({ fileStatus: "pending_approval" })} disabled={saving}>
+                        Nộp lại file đã sửa
+                      </Button>
                     </div>
                   )}
                   {(role === "manager" || role === "boss" || idea.createdById === session?.user?.id) && idea.fileStatus === "pending_approval" && (

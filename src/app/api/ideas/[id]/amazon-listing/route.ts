@@ -110,7 +110,7 @@ export async function PUT(
       }
     }
 
-    if (listingStatus === "selling") {
+    if (listingStatus === "published") {
       const finalAsin = asin ?? existing?.asin;
       const finalFnsku = fnskuCode ?? existing?.fnskuCode;
       const finalLabel = fnskuLabelFileUrl ?? existing?.fnskuLabelFileUrl;

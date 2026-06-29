@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import {
   LayoutDashboard,
   Lightbulb,
@@ -119,9 +120,15 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <Link href="/dashboard">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-sm font-bold">
-                  LT
+              <Link href="/dashboard" className="gap-3">
+                <div className="flex items-center justify-center h-8 shrink-0">
+                  <Image 
+                    src="/logo.svg" 
+                    alt="Logo" 
+                    width={120} 
+                    height={32} 
+                    className="h-full w-auto object-contain"
+                  />
                 </div>
                 <div className="grid flex-1 text-left leading-tight">
                   <span className="truncate font-semibold">Ligon Team</span>
