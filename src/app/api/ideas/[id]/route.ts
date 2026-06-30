@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { broadcastNotification } from "@/lib/socket-helper";
+import { broadcastNotification, broadcastGlobal } from "@/lib/socket-helper";
 import { can, type Role } from "@/lib/permissions";
 
 // GET /api/ideas/[id] - Get single idea with listings
@@ -193,6 +193,8 @@ export async function PATCH(
     if (body.topicId !== undefined) { updateData.topicId = body.topicId; coreEdited = true; }
     if (body.aiModelId !== undefined) { updateData.aiModelId = body.aiModelId; coreEdited = true; }
     if (body.mainImageUrl !== undefined) { updateData.mainImageUrl = body.mainImageUrl; coreEdited = true; }
+    if (body.source !== undefined) { updateData.source = body.source; coreEdited = true; }
+    if (body.partnerId !== undefined) { updateData.partnerId = body.partnerId; coreEdited = true; }
 
     // If employee edits a non-reviewing idea, flag it for re-review or resubmit
     if (currentRole === "employee" && coreEdited) {
@@ -208,7 +210,35 @@ export async function PATCH(
     const updated = await db.idea.update({
       where: { id },
       data: updateData,
+      include: {
+        createdBy: { select: { fullName: true } },
+        topic: { select: { name: true } },
+        partner: { select: { name: true } },
+        amazonListing: true,
+        etsyListing: true,
+      }
     });
+
+    const ideaRow = {
+      id: updated.id,
+      msku: updated.msku,
+      sku: updated.amazonListing?.sku,
+      mainImageUrl: updated.mainImageUrl,
+      status: updated.status,
+      photoStatus: updated.amazonListing?.photoStatus || updated.etsyListing?.photoStatus || "not_requested",
+      amazonPhotoStatus: updated.amazonListing?.photoStatus,
+      etsyPhotoStatus: updated.etsyListing?.photoStatus,
+      topicName: updated.topic.name,
+      createdByName: updated.createdBy.fullName,
+      createdAt: updated.createdAt.toISOString(),
+      needsReReview: updated.needsReReview,
+      reviewComment: updated.reviewComment,
+      source: updated.source,
+      partnerName: updated.partner?.name,
+      amazonListingStatus: updated.amazonListing?.listingStatus,
+      etsyListingStatus: updated.etsyListing?.listingStatus,
+      fulfillmentType: updated.amazonListing?.fulfillmentType || "FBM",
+    };
 
     // Create audit logs
     for (const entry of auditEntries) {
@@ -253,7 +283,8 @@ export async function PATCH(
         broadcastNotification([idea.createdById], {
           type,
           message,
-          actionUrl: `/ideas/${idea.id}`
+          actionUrl: `/ideas/${idea.id}`,
+          idea: ideaRow
         });
       }
     }
@@ -276,12 +307,22 @@ export async function PATCH(
         broadcastNotification(managersAndBosses.map(u => u.id), {
           type: "idea_updated",
           message: `Nhân viên đã cập nhật ý tưởng ${idea.msku} sau khi có yêu cầu chỉnh sửa.`,
-          actionUrl: `/ideas/${idea.id}`
+          actionUrl: `/ideas/${idea.id}`,
+          idea: ideaRow
         });
       }
     }
 
-    return NextResponse.json(updated);
+    // Broadcast globally to sync detail page
+    broadcastGlobal({
+      type: "idea_detail_updated",
+      ideaId: id,
+      updatedBy: session.user.fullName,
+      updatedById: session.user.id,
+      updatedData: ideaRow
+    });
+
+    return NextResponse.json(ideaRow);
   } catch (error) {
     console.error("PATCH /api/ideas/[id] error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

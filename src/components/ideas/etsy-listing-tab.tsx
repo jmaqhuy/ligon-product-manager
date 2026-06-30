@@ -72,7 +72,7 @@ export function EtsyListingTab({
 
   return (
     <>
-      <TabsContent value="etsy" className="flex-1 overflow-y-auto mt-0 space-y-3 data-[state=inactive]:hidden pr-1 relative">
+      <TabsContent value="etsy" className="mt-0 space-y-3 data-[state=inactive]:hidden pr-1 relative">
                     <fieldset disabled={isNotApproved && !isPartner} className="space-y-3">
                       <Card>
                         <CardHeader className="pb-2 flex flex-row items-center justify-between">

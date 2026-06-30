@@ -83,6 +83,9 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     // Handle incoming notifications globally
     socketInstance.on("new_notification", (data: any) => {
       if (session?.user && (!data.userIds || data.userIds.includes(session.user.id))) {
+        // Ignore internal sync events
+        if (data.type === "idea_detail_updated") return;
+
         // Only show if the settings allow it
         try {
           const settings = session.user.notificationSettings 

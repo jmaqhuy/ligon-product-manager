@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +41,7 @@ import {
   ExternalLink,
   Trash2,
   MessageSquareWarning,
+  ArrowUp,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -82,6 +84,7 @@ import { convertToDirectImageUrl } from "@/lib/google-drive";
 import { apiFetch } from "@/lib/api-client";
 import { ExcelUpload } from "@/components/excel-upload";
 import { FilterPopover } from "./components/filter-popover";
+import { useSocket } from "@/components/providers/socket-provider";
 
 // Status badge colors
 function getStatusBadge(idea: any) {
@@ -162,12 +165,13 @@ function getSourceBadge(source: string) {
   }
 }
 
-function IdeaTable({ ideas, loading, selectedIds, onSelectionChange, canSelect }: {
+function IdeaTable({ ideas, loading, selectedIds, onSelectionChange, canSelect, highlightedRowId }: {
   ideas: IdeaRow[];
   loading: boolean;
   selectedIds: Set<string>;
   onSelectionChange: (id: string, checked: boolean) => void;
   canSelect: boolean;
+  highlightedRowId?: string | null;
 }) {
   const router = useRouter();
   const allSelected = ideas.length > 0 && ideas.every((i) => selectedIds.has(i.id));
@@ -227,7 +231,7 @@ function IdeaTable({ ideas, loading, selectedIds, onSelectionChange, canSelect }
             return (
               <TableRow
                 key={idea.id}
-                className="cursor-pointer hover:bg-muted/50 group/row"
+                className={`cursor-pointer group/row ${idea.id === highlightedRowId ? "bg-blue-100 dark:bg-blue-900/40 transition-none" : "hover:bg-muted/50 transition-colors duration-1000"}`}
                 onClick={() => router.push(`/ideas/${idea.id}`)}
               >
                 {canSelect && (
@@ -327,6 +331,10 @@ export default function IdeasPage() {
   const isEmployee = role === "employee";
   const sessionReady = !!session?.user;
 
+  const { socket } = useSocket();
+
+  const queryClient = useQueryClient();
+
   const searchParams = useSearchParams();
   const ideaStatus = searchParams.get("ideaStatus");
   const photoStatus = searchParams.get("photoStatus");
@@ -339,8 +347,43 @@ export default function IdeasPage() {
 
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [ideas, setIdeas] = useState<IdeaRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [newItemsCount, setNewItemsCount] = useState(0);
+  const [highlightedRowId, setHighlightedRowId] = useState<string | null>(null);
+
+  const effectiveMine = urlMine !== null ? urlMine === "true" : isEmployee;
+
+  const queryKey = useMemo(() => ['ideas', { 
+    page, pageSize, search: searchQuery, ideaStatus, photoStatus, amazonStatus, 
+    etsyStatus, fulfillmentType, mine: effectiveMine, topicId, month 
+  }], [page, pageSize, searchQuery, ideaStatus, photoStatus, amazonStatus, etsyStatus, fulfillmentType, effectiveMine, topicId, month]);
+
+  const { data: queryData, isLoading: loading, refetch: fetchIdeas } = useQuery({
+    queryKey,
+    queryFn: async () => {
+      const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+      if (searchQuery) params.set("search", searchQuery);
+      if (ideaStatus) params.set("ideaStatus", ideaStatus);
+      if (photoStatus) params.set("photoStatus", photoStatus);
+      if (amazonStatus) params.set("amazonStatus", amazonStatus);
+      if (etsyStatus) params.set("etsyStatus", etsyStatus);
+      if (fulfillmentType) params.set("fulfillmentType", fulfillmentType);
+      if (effectiveMine) params.set("mine", "true");
+      if (topicId && topicId !== "all") params.set("topicId", topicId);
+      if (month) params.set("month", month);
+
+      const res = await fetch(`/api/ideas?${params.toString()}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+    enabled: sessionReady,
+  });
+
+  const ideas = queryData?.data || [];
+  const total = queryData?.total || 0;
+  const totalPages = queryData?.totalPages || 1;
 
   const [topics, setTopics] = useState<{ id: string; name: string }[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -351,10 +394,7 @@ export default function IdeasPage() {
   const [labelResults, setLabelResults] = useState<{ id: string; msku?: string; fnskuLabelFileUrl?: string; fnskuCode?: string; quantity?: number }[]>([]);
   const [labelLoading, setLabelLoading] = useState(false);
   const [labelQuantities, setLabelQuantities] = useState<Record<string, number>>({});
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [total, setTotal] = useState(0);
-  const [pageSize, setPageSize] = useState(20);
+  
   const canSelect = true;
 
   const handleSelectionChange = useCallback((id: string, checked: boolean) => {
@@ -475,43 +515,51 @@ export default function IdeasPage() {
     fetch("/api/topics").then(r => r.json()).then(setTopics).catch(() => { });
   }, []);
 
-  const fetchIdeas = useCallback(async () => {
-    if (!sessionReady) return;
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
-      if (searchQuery) params.set("search", searchQuery);
-      if (ideaStatus) params.set("ideaStatus", ideaStatus);
-      if (photoStatus) params.set("photoStatus", photoStatus);
-      if (amazonStatus) params.set("amazonStatus", amazonStatus);
-      if (etsyStatus) params.set("etsyStatus", etsyStatus);
-      if (fulfillmentType) params.set("fulfillmentType", fulfillmentType);
+  const handleShowNewIdeas = useCallback(() => {
+    setPage(1);
+    queryClient.invalidateQueries({ queryKey: ['ideas'] });
+    setNewItemsCount(0);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [queryClient]);
 
-      const effectiveMine = urlMine !== null ? urlMine === "true" : isEmployee;
-      if (effectiveMine) params.set("mine", "true");
-      if (topicId && topicId !== "all") params.set("topicId", topicId);
-      if (month) params.set("month", month);
-
-      const res = await fetch(`/api/ideas?${params.toString()}`);
-      if (res.ok) {
-        const json = await res.json();
-        setIdeas(json.data || json);
-        setTotal(json.total || (json.data || json).length);
-        setTotalPages(json.totalPages || 1);
-      } else {
-        // Ignored. Filter validation errors should just show empty lists.
-      }
-    } catch {
-      console.error("Failed to fetch ideas");
-    } finally {
-      setLoading(false);
-    }
-  }, [ideaStatus, photoStatus, amazonStatus, etsyStatus, fulfillmentType, urlMine, searchQuery, topicId, month, page, pageSize, isEmployee, sessionReady]);
-
-  // Initial load & dependency load
+  // Real-time automatic reload on websocket notification
   useEffect(() => {
-    fetchIdeas();
-  }, [fetchIdeas]);
+    if (!socket) return;
+    const handleNewNotification = (data: any) => {
+      const ideaId = data.actionUrl?.split('/').pop();
+      if (!ideaId) return;
+
+      if (data.type === "new_idea") {
+        setNewItemsCount(prev => prev + 1);
+      } else if (
+        data.type === "idea_approved" ||
+        data.type === "idea_rejected" ||
+        data.type === "idea_updated" ||
+        data.type === "idea_revision_requested"
+      ) {
+        if (!data.idea) return; // Fallback if backend doesn't send idea
+        
+        queryClient.setQueriesData({ queryKey: ['ideas'] }, (oldData: any) => {
+          if (!oldData || !oldData.data) return oldData;
+          
+          const exists = oldData.data.some((i: any) => i.id === data.idea.id);
+          if (!exists) return oldData;
+          
+          return {
+            ...oldData,
+            data: oldData.data.map((i: any) => i.id === data.idea.id ? data.idea : i)
+          };
+        });
+
+        setHighlightedRowId(data.idea.id);
+        setTimeout(() => setHighlightedRowId(null), 1500);
+      }
+    };
+    socket.on("new_notification", handleNewNotification);
+    return () => {
+      socket.off("new_notification", handleNewNotification);
+    };
+  }, [socket, queryClient]);
 
   // Debounced search logic
   useEffect(() => {
@@ -582,8 +630,8 @@ export default function IdeasPage() {
               </>
             )}
             <Button size="sm" variant="outline" onClick={() => {
-              const selectedIdeas = ideas.filter(i => selectedIds.has(i.id));
-              const skus = selectedIdeas.map(i => i.msku).join("\n");
+              const selectedIdeas = ideas.filter((i: any) => selectedIds.has(i.id));
+              const skus = selectedIdeas.map((i: any) => i.msku).join("\n");
               setLabelSkusInput(skus);
               setLabelDialogOpen(true);
               // Auto-search after dialog opens
@@ -593,7 +641,7 @@ export default function IdeasPage() {
                   const { data, error } = await apiFetch("/api/ideas/labels", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ skus: selectedIdeas.map(i => i.msku) }),
+                    body: JSON.stringify({ skus: selectedIdeas.map((i: any) => i.msku) }),
                   });
 
                   if (error) {
@@ -610,8 +658,8 @@ export default function IdeasPage() {
               <Printer className="h-4 w-4 mr-1" /> In Label
             </Button>
             {(() => {
-              const selectedIdeas = ideas.filter(i => selectedIds.has(i.id));
-              const canDeleteBatch = selectedIdeas.length > 0 && selectedIdeas.every(i => canDeleteIdea(i));
+              const selectedIdeas = ideas.filter((i: any) => selectedIds.has(i.id));
+              const canDeleteBatch = selectedIdeas.length > 0 && selectedIdeas.every((i: any) => canDeleteIdea(i));
               if (canDeleteBatch) {
                 return (
                   <Button size="sm" variant="destructive" onClick={() => setBatchDeleteIdList(Array.from(selectedIds))} disabled={batchProcessing} className="rounded-full ml-2">
@@ -629,8 +677,21 @@ export default function IdeasPage() {
       )}
 
       {/* Tabs */}
-      <div className="mt-4">
-        <IdeaTable ideas={ideas} loading={loading} selectedIds={selectedIds} onSelectionChange={handleSelectionChange} canSelect={canSelect} />
+      <div className="mt-4 relative">
+        {/* Pill Button for new items */}
+        {newItemsCount > 0 && (
+          <div className="absolute -top-10 left-1/2 -translate-x-1/2 z-10 animate-in fade-in slide-in-from-top-4">
+            <Button
+              variant="default"
+              className="rounded-full shadow-lg bg-blue-600 hover:bg-blue-700 text-white animate-bounce"
+              onClick={handleShowNewIdeas}
+            >
+              <ArrowUp className="w-4 h-4 mr-2" />
+              Có {newItemsCount} ý tưởng mới
+            </Button>
+          </div>
+        )}
+        <IdeaTable ideas={ideas} loading={loading} selectedIds={selectedIds} onSelectionChange={handleSelectionChange} canSelect={canSelect} highlightedRowId={highlightedRowId} />
       </div>
 
       {/* Pagination */}

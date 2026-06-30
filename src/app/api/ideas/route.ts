@@ -20,15 +20,20 @@ export async function GET(req: NextRequest) {
     if (blocked) return blocked;
 
     const searchParams = req.nextUrl.searchParams;
-    const tab = searchParams.get("tab") || "reviewing";
     const search = searchParams.get("search") || "";
     const mine = searchParams.get("mine") === "true";
     const topicId = searchParams.get("topicId");
     const month = searchParams.get("month");
     const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") || "20")));
+    const orderByParam = searchParams.get("orderBy") || "createdAt";
+    const orderDirection = searchParams.get("orderDirection") || "desc";
 
-    // Build where clause based on tab
+    const validSortFields = ["createdAt", "updatedAt", "msku", "status"];
+    const orderByField = validSortFields.includes(orderByParam) ? orderByParam : "createdAt";
+    const orderByDirection = orderDirection === "asc" ? "asc" : "desc";
+
+    // Build where clause
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const where: any = { AND: [] };
 
@@ -92,7 +97,7 @@ export async function GET(req: NextRequest) {
           amazonListing: { select: { listingStatus: true, fulfillmentType: true, sku: true, photoStatus: true } },
           etsyListing: { select: { listingStatus: true, photoStatus: true } },
         },
-        orderBy: tab === "reviewing" ? { createdAt: "desc" } : { updatedAt: "desc" },
+        orderBy: { [orderByField]: orderByDirection },
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
@@ -238,7 +243,35 @@ export async function POST(req: Request) {
           }
         }
       },
+      include: {
+        createdBy: { select: { fullName: true } },
+        topic: { select: { name: true } },
+        partner: { select: { name: true } },
+        amazonListing: true,
+        etsyListing: true,
+      }
     });
+
+    const ideaRow = {
+      id: idea.id,
+      msku: idea.msku,
+      sku: idea.amazonListing?.sku,
+      mainImageUrl: idea.mainImageUrl,
+      status: idea.status,
+      photoStatus: idea.amazonListing?.photoStatus || idea.etsyListing?.photoStatus || "not_requested",
+      amazonPhotoStatus: idea.amazonListing?.photoStatus,
+      etsyPhotoStatus: idea.etsyListing?.photoStatus,
+      topicName: idea.topic.name,
+      createdByName: idea.createdBy.fullName,
+      createdAt: idea.createdAt.toISOString(),
+      needsReReview: idea.needsReReview,
+      reviewComment: idea.reviewComment,
+      source: idea.source,
+      partnerName: idea.partner?.name,
+      amazonListingStatus: idea.amazonListing?.listingStatus,
+      etsyListingStatus: idea.etsyListing?.listingStatus,
+      fulfillmentType: idea.amazonListing?.fulfillmentType || "FBM",
+    };
 
     // Audit log
     await db.auditLog.create({
@@ -271,7 +304,8 @@ export async function POST(req: Request) {
         broadcastNotification(managersAndBosses.map(u => u.id), {
           type: "new_idea",
           message: `Nhân viên ${session.user.nameAbbreviation || session.user.fullName || 'ẩn danh'} vừa tạo ý tưởng mới (MSKU: ${msku})`,
-          actionUrl: `/ideas/${idea.id}`
+          actionUrl: `/ideas/${idea.id}`,
+          idea: ideaRow
         });
       }
     }
