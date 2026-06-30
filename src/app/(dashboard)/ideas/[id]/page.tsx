@@ -21,6 +21,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetTr
 import { AuditLogViewer } from "@/components/audit-log-viewer";
 import { AmazonListingTab } from "@/components/ideas/amazon-listing-tab";
 import { EtsyListingTab } from "@/components/ideas/etsy-listing-tab";
+import { EditIdeaSheet } from "../components/edit-idea-sheet";
 
 import { ImagePreviewDialog } from "@/components/image-preview-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -187,12 +188,11 @@ export default function IdeaDetailPage() {
   const [editOpen, setEditOpen] = useState(false);
   const { socket } = useSocket();
 
-  // Conflict Resolution
-  const [conflictData, setConflictData] = useState<any>(null);
-  const [conflictBy, setConflictBy] = useState<string>("");
-  const [conflictModalOpen, setConflictModalOpen] = useState(false);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
+
+  const [conflictData, setConflictData] = useState<any>(null);
+  const [conflictBy, setConflictBy] = useState<string>("");
 
   const fetchConflictData = useCallback(async (updatedBy: string) => {
     try {
@@ -201,7 +201,6 @@ export default function IdeaDetailPage() {
         const data = await res.json();
         setConflictData(data);
         setConflictBy(updatedBy);
-        setConflictModalOpen(true);
       }
     } catch {
       toast.error("Không thể tải dữ liệu mới nhất.");
@@ -218,7 +217,11 @@ export default function IdeaDetailPage() {
       if (payload.updatedById === session?.user?.id) return;
 
       if (editOpen) {
-        // User is editing — quarantine new data, show conflict warning
+        // User is editing — show warning and show diff modal immediately
+        toast.warning(`Ý tưởng vừa được cập nhật bởi ${payload.updatedBy}. Lưu ý khi lưu!`, {
+          icon: '⚠️',
+          position: 'bottom-right'
+        });
         fetchConflictData(payload.updatedBy);
         return;
       }
@@ -250,24 +253,6 @@ export default function IdeaDetailPage() {
   const [changeFulfillmentOpen, setChangeFulfillmentOpen] = useState(false);
   const [pendingFulfillment, setPendingFulfillment] = useState<"FBM" | "FBA" | null>(null);
 
-  // Idea general form state — only prompt (title/description belong to Amazon/Etsy)
-  const [ideaForm, setIdeaForm] = useState({
-    prompt: "",
-    topicId: "",
-    aiModelId: "",
-    widthCm: "",
-    heightCm: "",
-    thicknessMm: "",
-    material: "",
-    source: "",
-    partnerId: "",
-    sourceLinks: [""],
-  });
-  const [dimensionUnit, setDimensionUnit] = useState<"mm" | "cm" | "in">("mm");
-  const [internalSearch, setInternalSearch] = useState("");
-  const [internalResults, setInternalResults] = useState<any[]>([]);
-  const [isSearchingInternal, setIsSearchingInternal] = useState(false);
-
   // Amazon listing form state
 
   // Etsy listing form state
@@ -284,23 +269,6 @@ export default function IdeaDetailPage() {
       if (!res.ok) { toast.error("Không tìm thấy ý tưởng"); router.push("/ideas"); return; }
       const data = await res.json();
       setIdea(data);
-      let parsedLinks = [""];
-      if (data.sourceLinks) {
-        try { parsedLinks = JSON.parse(data.sourceLinks); } catch { }
-      }
-      setDimensionUnit("mm");
-      setIdeaForm({
-        prompt: data.prompt || "",
-        topicId: data.topicId || "",
-        aiModelId: data.aiModelId || "",
-        widthCm: data.widthCm ? (data.widthCm * 10).toString() : "",
-        heightCm: data.heightCm ? (data.heightCm * 10).toString() : "",
-        thicknessMm: data.thicknessMm ? data.thicknessMm.toString() : "",
-        material: data.material || "",
-        source: data.source || "",
-        partnerId: data.partnerId || "",
-        sourceLinks: parsedLinks.length > 0 ? parsedLinks : [""]
-      });
 
     } catch (error) {
       console.error(error);
@@ -331,21 +299,6 @@ export default function IdeaDetailPage() {
   }, [fetchIdea]);
 
   // ─── Actions ──────────────────────────────────────────────────────
-  const handleSearchInternal = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!internalSearch.trim()) return;
-    setIsSearchingInternal(true);
-    try {
-      const res = await fetch(`/api/ideas?search=${encodeURIComponent(internalSearch)}&pageSize=5`);
-      if (res.ok) {
-        const data = await res.json();
-        setInternalResults(data.data || []);
-      }
-    } finally {
-      setIsSearchingInternal(false);
-    }
-  };
-
   const handleReviewAction = async (overrideAction?: "approve" | "reject" | "revise", requestPhotos?: boolean, fulfillmentType?: "FBM" | "FBA") => {
     const action = overrideAction || actionType;
     if (!action) return;
@@ -411,59 +364,6 @@ export default function IdeaDetailPage() {
       }
       else { const err = await res.json(); toast.error(err.error || "Không thể xoá ý tưởng này"); }
     } catch { toast.error("Lỗi mạng khi xoá ý tưởng"); }
-    finally { setSaving(false); }
-  };
-
-  const handleSaveIdea = async (overrideVersion?: number) => {
-    setSaving(true);
-    try {
-      let w = ideaForm.widthCm ? Number(ideaForm.widthCm) : null;
-      let h = ideaForm.heightCm ? Number(ideaForm.heightCm) : null;
-      let t = ideaForm.thicknessMm ? Number(ideaForm.thicknessMm) : null;
-
-      // Convert UI unit to mm
-      if (w !== null) w = dimensionUnit === "mm" ? w : dimensionUnit === "cm" ? w * 10 : w * 25.4;
-      if (h !== null) h = dimensionUnit === "mm" ? h : dimensionUnit === "cm" ? h * 10 : h * 25.4;
-      if (t !== null) t = dimensionUnit === "mm" ? t : dimensionUnit === "cm" ? t * 10 : t * 25.4;
-
-      // Convert mm to DB unit (w, h in cm; t in mm)
-      if (w !== null) w = Number((w / 10).toFixed(2));
-      if (h !== null) h = Number((h / 10).toFixed(2));
-      if (t !== null) t = Number(t.toFixed(2));
-
-      // Explicit field destructuring — prevent state leakage
-      const payload = {
-        prompt: ideaForm.prompt,
-        topicId: ideaForm.topicId,
-        aiModelId: ideaForm.aiModelId,
-        widthCm: w,
-        heightCm: h,
-        thicknessMm: t,
-        material: ideaForm.material,
-        sourceLinks: JSON.stringify(ideaForm.sourceLinks.filter(l => l.trim())),
-        version: overrideVersion ?? idea.version
-      };
-      const res = await fetch(`/api/ideas/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      if (res.ok) {
-        const updatedIdea = await res.json();
-        queryClient.setQueriesData({ queryKey: ["ideas"] }, (oldCache: any) => {
-          if (!oldCache || !oldCache.data) return oldCache;
-          return { ...oldCache, data: oldCache.data.map((i: any) => i.id === updatedIdea.id ? updatedIdea : i) };
-        });
-        toast.success("Đã cập nhật!");
-        setEditOpen(false);
-        setConflictData(null);
-        setConflictModalOpen(false);
-        fetchIdea();
-      } else if (res.status === 409) {
-        // Optimistic lock conflict — fetch latest and show diff modal
-        toast.error("Dữ liệu đã bị thay đổi bởi người khác. Đang tải phiên bản mới nhất...");
-        await fetchConflictData("Người dùng khác");
-      } else {
-        const data = await res.json();
-        toast.error(data.error || "Lỗi cập nhật");
-      }
-    } catch { toast.error("Lỗi hệ thống"); }
     finally { setSaving(false); }
   };
 
@@ -603,140 +503,29 @@ export default function IdeaDetailPage() {
               {/* Action buttons — right side */}
               <div className="flex items-center gap-1 shrink-0">
                 {/* 1. Edit */}
-                <Sheet open={editOpen} onOpenChange={setEditOpen}>
-                  <Tooltip><TooltipTrigger asChild>
-                    <span>
-                      <SheetTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" disabled={(idea.amazonListing?.listingStatus === "published" || idea.etsyListing?.listingStatus === "published")}><Pencil className="h-3.5 w-3.5" /></Button></SheetTrigger>
-                    </span>
-                  </TooltipTrigger><TooltipContent sideOffset={5} className="z-[100]">Sửa prompt & ảnh</TooltipContent></Tooltip>
-                  <SheetContent side="right" className="w-[800px] sm:max-w-[800px] p-0 z-[100] flex flex-col h-full" onInteractOutside={(e) => e.preventDefault()}>
-                    <SheetHeader className="px-6 pt-6 pb-4 shrink-0 border-b">
-                      <SheetTitle className="text-xl">Chỉnh sửa thông tin</SheetTitle>
-                      <SheetDescription className="text-sm mt-1">{idea.msku}</SheetDescription>
-                    </SheetHeader>
-                    <div className="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-5">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="etopic" className="text-xs font-medium">Chủ đề sản phẩm</Label>
-                        <Select value={ideaForm.topicId} onValueChange={v => setIdeaForm(prev => ({ ...prev, topicId: v }))}>
-                          <SelectTrigger id="etopic" className="h-8 text-sm"><SelectValue placeholder="Chọn chủ đề" /></SelectTrigger>
-                          <SelectContent className="z-[200]">{topics.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <Label htmlFor="eaimodel" className="text-xs font-medium">AI Model</Label>
-                        <Select value={ideaForm.aiModelId} onValueChange={v => setIdeaForm(prev => ({ ...prev, aiModelId: v }))}>
-                          <SelectTrigger id="eaimodel" className="h-8 text-sm"><SelectValue placeholder="Chọn model" /></SelectTrigger>
-                          <SelectContent className="z-[200]">{aiModels.map(m => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}</SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-medium">Kích thước</Label>
-                        <div className="flex items-center gap-2">
-                          <Input id="ewidth" type="number" placeholder={`Rộng`} value={ideaForm.widthCm} onChange={e => setIdeaForm(prev => ({ ...prev, widthCm: e.target.value }))} className="h-8 text-sm flex-1" />
-                          <span className="text-muted-foreground text-xs">x</span>
-                          <Input id="eheight" type="number" placeholder={`Cao`} value={ideaForm.heightCm} onChange={e => setIdeaForm(prev => ({ ...prev, heightCm: e.target.value }))} className="h-8 text-sm flex-1" />
-                          <span className="text-muted-foreground text-xs">x</span>
-                          <Input id="ethick" type="number" placeholder={`Dày`} value={ideaForm.thicknessMm} onChange={e => setIdeaForm(prev => ({ ...prev, thicknessMm: e.target.value }))} className="h-8 text-sm flex-1" />
-                          <Select value={dimensionUnit} onValueChange={(v: "mm" | "cm" | "in") => {
-                            if (v === dimensionUnit) return;
-                            setIdeaForm(prev => {
-                              const convert = (val: string) => {
-                                if (!val) return "";
-                                const num = Number(val);
-                                const mm = dimensionUnit === "mm" ? num : dimensionUnit === "cm" ? num * 10 : num * 25.4;
-                                const target = v === "mm" ? mm : v === "cm" ? mm / 10 : mm / 25.4;
-                                return Number.isInteger(target) ? target.toString() : target.toFixed(2);
-                              };
-                              return { ...prev, widthCm: convert(prev.widthCm), heightCm: convert(prev.heightCm), thicknessMm: convert(prev.thicknessMm) };
-                            });
-                            setDimensionUnit(v);
-                          }}>
-                            <SelectTrigger className="h-8 w-20 text-xs shrink-0"><SelectValue /></SelectTrigger>
-                            <SelectContent className="z-[200]">
-                              <SelectItem value="mm">mm</SelectItem>
-                              <SelectItem value="cm">cm</SelectItem>
-                              <SelectItem value="in">in</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <Label htmlFor="ematerial" className="text-xs font-medium">Vật liệu</Label>
-                        <Input id="ematerial" value={ideaForm.material} onChange={e => setIdeaForm(prev => ({ ...prev, material: e.target.value }))} className="h-8 text-sm" />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-xs font-medium">Source Links</Label>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2"><Search className="h-3 w-3 mr-1" /> Tìm nội bộ</Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-80 p-3 z-[200]" align="end" side="right">
-                              <form onSubmit={handleSearchInternal} className="flex gap-2">
-                                <Input value={internalSearch} onChange={e => setInternalSearch(e.target.value)} placeholder="Nhập MSKU hoặc Tên..." className="h-8 text-xs" />
-                                <Button type="submit" size="sm" className="h-8 px-2" disabled={isSearchingInternal}>{isSearchingInternal ? <Loader2 className="h-3 w-3 animate-spin" /> : "Tìm"}</Button>
-                              </form>
-                              <div className="mt-3 space-y-1 max-h-48 overflow-y-auto">
-                                {internalResults.map(res => (
-                                  <div key={res.id} className="flex items-center justify-between p-2 rounded bg-muted/50 text-xs">
-                                    <span className="font-medium truncate max-w-[150px]" title={res.msku}>{res.msku}</span>
-                                    <Button type="button" size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => {
-                                      const newLinks = [...ideaForm.sourceLinks];
-                                      const last = newLinks[newLinks.length - 1];
-                                      if (!last) newLinks[newLinks.length - 1] = `internal:${res.id}`;
-                                      else newLinks.push(`internal:${res.id}`);
-                                      setIdeaForm(prev => ({ ...prev, sourceLinks: newLinks }));
-                                      toast.success("Đã thêm link nội bộ");
-                                    }}>Thêm</Button>
-                                  </div>
-                                ))}
-                                {internalResults.length === 0 && !isSearchingInternal && internalSearch && <div className="text-xs text-muted-foreground text-center py-2">Không tìm thấy kết quả phù hợp</div>}
-                              </div>
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                        {ideaForm.sourceLinks.map((link, i) => (
-                          <div key={i} className="flex gap-2">
-                            <Input value={link} onChange={e => { const u = [...ideaForm.sourceLinks]; u[i] = e.target.value; setIdeaForm(prev => ({ ...prev, sourceLinks: u })); }} placeholder="https:// hoặc internal:ID" className="h-8 text-sm" />
-                            {ideaForm.sourceLinks.length > 1 && <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setIdeaForm(prev => ({ ...prev, sourceLinks: prev.sourceLinks.filter((_, j) => j !== i) }))}><X className="h-4 w-4" /></Button>}
-                          </div>
-                        ))}
-                        {ideaForm.sourceLinks.length < 5 && <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => setIdeaForm(prev => ({ ...prev, sourceLinks: [...prev.sourceLinks, ""] }))}><Plus className="mr-1 h-3 w-3" />Thêm link</Button>}
-                      </div>
-
-                      <div className="flex-1 flex flex-col min-h-[150px] mt-2">
-                        <Label htmlFor="ep" className="text-xs font-medium flex items-center gap-1.5 mb-1.5 shrink-0"><Sparkles className="h-3 w-3 text-amber-500" /> Prompt</Label>
-                        <Textarea id="ep" value={ideaForm.prompt} onChange={e => setIdeaForm(prev => ({ ...prev, prompt: e.target.value }))} placeholder="Nhập prompt..." className="flex-1 resize-none text-sm p-3" />
-                      </div>
-                    </div>
-                    <div className="shrink-0 flex justify-end gap-2 px-6 py-4 border-t bg-muted/20">
-                      <Button variant="outline" onClick={() => {
-                        let parsedLinks = [""];
-                        if (idea.sourceLinks) {
-                          try { parsedLinks = JSON.parse(idea.sourceLinks); } catch { }
-                        }
-                        setDimensionUnit("cm");
-                        setIdeaForm({
-                          prompt: idea.prompt || "",
-                          topicId: idea.topicId || "",
-                          aiModelId: idea.aiModelId || "",
-                          widthCm: idea.widthCm || "",
-                          heightCm: idea.heightCm || "",
-                          thicknessMm: idea.thicknessMm || "",
-                          material: idea.material || "",
-                          source: idea.source || "",
-                          partnerId: idea.partnerId || "",
-                          sourceLinks: parsedLinks.length > 0 ? parsedLinks : [""]
-                        });
-                      }}><X className="h-4 w-4 mr-1" /> Đặt lại</Button>
-                      <Button onClick={() => handleSaveIdea()} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />} Lưu</Button>
-                    </div>
-                  </SheetContent>
-                </Sheet>
+                <EditIdeaSheet 
+                  idea={idea} 
+                  open={editOpen} 
+                  onOpenChange={setEditOpen} 
+                  topics={topics} 
+                  aiModels={aiModels} 
+                  onSuccess={(updatedIdea) => {
+                    queryClient.setQueriesData({ queryKey: ["ideas"] }, (oldCache: any) => {
+                      if (!oldCache || !oldCache.data) return oldCache;
+                      return { ...oldCache, data: oldCache.data.map((i: any) => i.id === updatedIdea.id ? updatedIdea : i) };
+                    });
+                    fetchIdea();
+                  }}
+                  externalConflictData={conflictData}
+                  externalConflictBy={conflictBy}
+                  onClearConflict={() => {
+                    setConflictData(null);
+                    setConflictBy("");
+                  }}
+                  onConflict={() => {
+                    toast.error("Dữ liệu đã bị thay đổi bởi người khác. Vui lòng kiểm tra lại.");
+                  }}
+                />
 
                 {/* 2. Make a Copy */}
                 <Tooltip><TooltipTrigger asChild>
@@ -1049,7 +838,7 @@ export default function IdeaDetailPage() {
               <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Thông tin chung</span>
               <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] px-1">
                 <div className="flex items-center gap-1.5 text-muted-foreground"><Calendar className="h-3 w-3" /> Ngày tạo</div><span className="text-right font-medium">{new Date(idea.createdAt).toLocaleDateString("vi-VN")}</span>
-                <div className="flex items-center gap-1.5 text-muted-foreground"><Ruler className="h-3 w-3" /> Kích thước</div><span className="text-right font-medium">{idea.widthCm ? `${Number(idea.widthCm) * 10}×${Number(idea.heightCm) * 10}×${idea.thicknessMm}mm` : "—"}</span>
+                <div className="flex items-center gap-1.5 text-muted-foreground"><Ruler className="h-3 w-3" /> Kích thước</div><span className="text-right font-medium">{idea.widthCm ? `${idea.widthCm} × ${idea.heightCm} cm, dày ${idea.thicknessMm ?? "—"} mm` : "—"}</span>
                 <div className="flex items-center gap-1.5 text-muted-foreground"><Layers className="h-3 w-3" /> Vật liệu</div><span className="text-right font-medium truncate">{idea.material || "—"}</span>
               </div>
             </div>
@@ -1263,109 +1052,7 @@ export default function IdeaDetailPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-            {/* ═══ Conflict Resolution Modal ═══ */}
-      <Dialog open={conflictModalOpen} onOpenChange={(open) => { if (!open) setConflictModalOpen(false); }}>
-        <DialogContent showCloseButton={false} className="sm:max-w-5xl max-h-[90vh] p-0 flex flex-col z-[300] overflow-hidden">
-          <div className="shrink-0 px-6 pt-6 pb-4 border-b">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-base">
-                <GitCompareArrows className="h-5 w-5 text-amber-500" />
-                Xung đột dữ liệu
-              </DialogTitle>
-              <p className="text-sm text-muted-foreground mt-1">
-                <strong>{conflictBy}</strong> vừa cập nhật ý tưởng này. Bạn có thể đồng bộ từng trường hoặc ghi đè toàn bộ.
-              </p>
-            </DialogHeader>
-          </div>
 
-          {conflictData && (() => {
-            const myTopic = topics.find((t: any) => t.id === ideaForm.topicId)?.name || ideaForm.topicId;
-            const serverTopic = conflictData.topic?.name || "";
-            const myModel = aiModels.find((m: any) => m.id === ideaForm.aiModelId)?.name || ideaForm.aiModelId;
-            const serverModel = conflictData.aiModel?.name || "";
-            const myDims = `${ideaForm.widthCm || "—"} × ${ideaForm.heightCm || "—"} × ${ideaForm.thicknessMm || "—"} ${dimensionUnit}`;
-            const serverDims = conflictData.widthCm ? `${Number(conflictData.widthCm) * 10} × ${Number(conflictData.heightCm) * 10} × ${conflictData.thicknessMm} mm` : "—";
-            const myMaterial = ideaForm.material || "—";
-            const serverMaterial = conflictData.material || "—";
-            const myLinks = ideaForm.sourceLinks.filter((l: string) => l.trim()).join("\n") || "—";
-            const serverLinks = (() => { try { return (JSON.parse(conflictData.sourceLinks || "[]") as string[]).join("\n") || "—"; } catch { return "—"; } })();
-            const myPrompt = ideaForm.prompt || "—";
-            const serverPrompt = conflictData.prompt || "—";
-
-            const fields: DiffField[] = [
-              { key: "topicId", label: "Chủ đề sản phẩm", leftVal: myTopic, rightVal: serverTopic },
-              { key: "aiModelId", label: "AI Model", leftVal: myModel, rightVal: serverModel },
-              { key: "dims", label: "Kích thước", leftVal: myDims, rightVal: serverDims },
-              { key: "material", label: "Vật liệu", leftVal: myMaterial, rightVal: serverMaterial },
-              { key: "sourceLinks", label: "Source Links", leftVal: myLinks, rightVal: serverLinks },
-              { key: "prompt", label: "Prompt", leftVal: myPrompt, rightVal: serverPrompt, isLongText: true },
-            ];
-
-            const handleSyncField = (key: string) => {
-              if (key === "dims") {
-                setIdeaForm(prev => ({
-                  ...prev,
-                  widthCm: conflictData.widthCm ? (conflictData.widthCm * 10).toString() : "",
-                  heightCm: conflictData.heightCm ? (conflictData.heightCm * 10).toString() : "",
-                  thicknessMm: conflictData.thicknessMm ? conflictData.thicknessMm.toString() : "",
-                }));
-                setDimensionUnit("mm");
-              } else if (key === "sourceLinks") {
-                const parsedLinks = (() => { try { return JSON.parse(conflictData.sourceLinks || "[]"); } catch { return [""]; } })();
-                setIdeaForm(prev => ({ ...prev, sourceLinks: parsedLinks.length > 0 ? parsedLinks : [""] }));
-              } else {
-                setIdeaForm(prev => ({ ...prev, [key]: conflictData[key] || "" }));
-              }
-            };
-
-            return (
-              <DiffViewer 
-                fields={fields} 
-                onSyncField={handleSyncField} 
-              />
-            );
-          })()}
-
-          <div className="shrink-0 flex justify-end gap-2 px-6 py-4 border-t bg-muted/20">
-            <Button variant="outline" onClick={() => setConflictModalOpen(false)}>
-              Đóng
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                const parsedLinks = (() => { try { return JSON.parse(conflictData.sourceLinks || "[]"); } catch { return [""]; } })();
-                setDimensionUnit("mm");
-                setIdeaForm({
-                  prompt: conflictData.prompt || "",
-                  topicId: conflictData.topicId || "",
-                  aiModelId: conflictData.aiModelId || "",
-                  widthCm: conflictData.widthCm ? (conflictData.widthCm * 10).toString() : "",
-                  heightCm: conflictData.heightCm ? (conflictData.heightCm * 10).toString() : "",
-                  thicknessMm: conflictData.thicknessMm ? conflictData.thicknessMm.toString() : "",
-                  material: conflictData.material || "",
-                  source: conflictData.source || "",
-                  partnerId: conflictData.partnerId || "",
-                  sourceLinks: parsedLinks.length > 0 ? parsedLinks : [""]
-                });
-                setIdea(conflictData);
-                setConflictData(null);
-                setConflictModalOpen(false);
-                toast.success("Đã áp dụng toàn bộ phiên bản từ server.");
-              }}
-            >
-              <RefreshCw className="h-4 w-4 mr-1" /> Lấy toàn bộ từ Server
-            </Button>
-            <Button
-              variant="default"
-              onClick={() => handleSaveIdea(conflictData.version)}
-              disabled={saving}
-            >
-              {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
-              Lưu bản gộp (Merge & Save)
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* ═══ Manager Review Modal ═══ */}
       <Dialog open={reviewModalOpen} onOpenChange={(open) => { if (!open) setReviewModalOpen(false); }}>

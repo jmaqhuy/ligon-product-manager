@@ -121,7 +121,11 @@ export async function PATCH(
       if ((body.status === "approved" || body.status === "rejected" || body.status === "revision_requested") && !can(currentRole, "approve_idea")) {
         return NextResponse.json({ error: "Bạn không có quyền duyệt/từ chối ý tưởng" }, { status: 403 });
       }
-      auditEntries.push({ field: "status", oldVal: idea.status, newVal: body.status });
+      // Only create audit log for status changes made by employees (not admin/manager/boss)
+      // Admin status changes (approve/reject/revise) don't need re-review
+      if (currentRole === "employee") {
+        auditEntries.push({ field: "status", oldVal: idea.status, newVal: body.status });
+      }
       updateData.status = body.status;
 
       if (body.fulfillmentType) {
@@ -254,6 +258,20 @@ export async function PATCH(
         }))
       })
     ]);
+
+    // When needsReReview is cleared (manager confirmed), mark all unreviewed audit logs as reviewed
+    if (body.needsReReview === false || updateData.needsReReview === false) {
+      await db.auditLog.updateMany({
+        where: {
+          entityType: "idea",
+          entityId: id,
+          reviewedAt: null,
+        },
+        data: {
+          reviewedAt: new Date(),
+        },
+      });
+    }
 
     const ideaRow = {
       id: updated.id,

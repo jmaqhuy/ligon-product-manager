@@ -5,6 +5,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { TopBar } from "@/components/layout/top-bar";
 import { ConfettiCelebration } from "@/components/confetti-celebration";
+import { NuqsAdapter } from 'nuqs/adapters/next/app';
 
 export default async function DashboardLayout({
   children,
@@ -33,15 +34,17 @@ export default async function DashboardLayout({
   const defaultOpen = sidebarState === "false" ? false : true;
 
   return (
-    <SidebarProvider defaultOpen={defaultOpen}>
-      <AppSidebar />
-      <SidebarInset>
-        <TopBar />
-        <main className="flex-1 px-4 py-3 md:px-6 md:py-4">
-          {children}
-        </main>
-        <ConfettiCelebration />
-      </SidebarInset>
-    </SidebarProvider>
+    <NuqsAdapter>
+      <SidebarProvider defaultOpen={defaultOpen}>
+        <AppSidebar />
+        <SidebarInset>
+          <TopBar />
+          <main className="flex-1 px-4 py-3 md:px-6 md:py-4">
+            {children}
+          </main>
+          <ConfettiCelebration />
+        </SidebarInset>
+      </SidebarProvider>
+    </NuqsAdapter>
   );
 }

@@ -415,6 +415,7 @@ model AuditLog {
   newValue    String?  @map("new_value")
   changedById String   @map("changed_by")
   changedAt   DateTime @default(now()) @map("changed_at")
+  reviewedAt  DateTime? @map("reviewed_at")
 
   // Relations
   changedBy User @relation(fields: [changedById], references: [id])
