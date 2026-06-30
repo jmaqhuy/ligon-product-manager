@@ -175,10 +175,28 @@ export async function PATCH(
     }
 
     // Dimensions & material
-    if (body.widthCm !== undefined) { updateData.widthCm = body.widthCm; }
-    if (body.heightCm !== undefined) { updateData.heightCm = body.heightCm; }
-    if (body.thicknessMm !== undefined) { updateData.thicknessMm = body.thicknessMm; }
-    if (body.material !== undefined) { updateData.material = body.material; }
+    const addAudit = (field: string, oldV: any, newV: any) => {
+      const oldStr = oldV != null ? String(oldV) : null;
+      const newStr = newV != null ? String(newV) : null;
+      if (oldStr !== newStr) {
+        auditEntries.push({ field, oldVal: oldStr, newVal: newStr });
+        return true;
+      }
+      return false;
+    };
+
+    if (body.widthCm !== undefined) { 
+      if (addAudit("widthCm", idea.widthCm, body.widthCm)) updateData.widthCm = body.widthCm; 
+    }
+    if (body.heightCm !== undefined) { 
+      if (addAudit("heightCm", idea.heightCm, body.heightCm)) updateData.heightCm = body.heightCm; 
+    }
+    if (body.thicknessMm !== undefined) { 
+      if (addAudit("thicknessMm", idea.thicknessMm, body.thicknessMm)) updateData.thicknessMm = body.thicknessMm; 
+    }
+    if (body.material !== undefined) { 
+      if (addAudit("material", idea.material, body.material)) updateData.material = body.material; 
+    }
 
     // Photo status
     if (body.photoStatus !== undefined) {
@@ -188,13 +206,19 @@ export async function PATCH(
 
     // Core fields
     let coreEdited = false;
-    if (body.sourceLinks !== undefined) { updateData.sourceLinks = body.sourceLinks; coreEdited = true; }
-    if (body.prompt !== undefined) { updateData.prompt = body.prompt; coreEdited = true; }
-    if (body.topicId !== undefined) { updateData.topicId = body.topicId; coreEdited = true; }
-    if (body.aiModelId !== undefined) { updateData.aiModelId = body.aiModelId; coreEdited = true; }
-    if (body.mainImageUrl !== undefined) { updateData.mainImageUrl = body.mainImageUrl; coreEdited = true; }
-    if (body.source !== undefined) { updateData.source = body.source; coreEdited = true; }
-    if (body.partnerId !== undefined) { updateData.partnerId = body.partnerId; coreEdited = true; }
+    if (body.sourceLinks !== undefined) { 
+      const newLinks = typeof body.sourceLinks === "string" ? body.sourceLinks : JSON.stringify(body.sourceLinks);
+      if (addAudit("sourceLinks", idea.sourceLinks, newLinks)) {
+        updateData.sourceLinks = newLinks; 
+        coreEdited = true; 
+      }
+    }
+    if (body.prompt !== undefined) { if (addAudit("prompt", idea.prompt, body.prompt)) { updateData.prompt = body.prompt; coreEdited = true; } }
+    if (body.topicId !== undefined) { if (addAudit("topicId", idea.topicId, body.topicId)) { updateData.topicId = body.topicId; coreEdited = true; } }
+    if (body.aiModelId !== undefined) { if (addAudit("aiModelId", idea.aiModelId, body.aiModelId)) { updateData.aiModelId = body.aiModelId; coreEdited = true; } }
+    if (body.mainImageUrl !== undefined) { if (addAudit("mainImageUrl", idea.mainImageUrl, body.mainImageUrl)) { updateData.mainImageUrl = body.mainImageUrl; coreEdited = true; } }
+    if (body.source !== undefined) { if (addAudit("source", idea.source, body.source)) { updateData.source = body.source; coreEdited = true; } }
+    if (body.partnerId !== undefined) { if (addAudit("partnerId", idea.partnerId, body.partnerId)) { updateData.partnerId = body.partnerId; coreEdited = true; } }
 
     // If employee edits a non-reviewing idea, flag it for re-review or resubmit
     if (currentRole === "employee" && coreEdited) {
@@ -207,17 +231,29 @@ export async function PATCH(
       }
     }
 
-    const updated = await db.idea.update({
-      where: { id },
-      data: updateData,
-      include: {
-        createdBy: { select: { fullName: true } },
-        topic: { select: { name: true } },
-        partner: { select: { name: true } },
-        amazonListing: true,
-        etsyListing: true,
-      }
-    });
+    const [updated] = await db.$transaction([
+      db.idea.update({
+        where: { id },
+        data: updateData,
+        include: {
+          createdBy: { select: { fullName: true } },
+          topic: { select: { name: true } },
+          partner: { select: { name: true } },
+          amazonListing: true,
+          etsyListing: true,
+        }
+      }),
+      db.auditLog.createMany({
+        data: auditEntries.map(e => ({
+          entityType: "idea",
+          entityId: id,
+          fieldName: e.field,
+          oldValue: e.oldVal,
+          newValue: e.newVal,
+          changedById: session.user.id,
+        }))
+      })
+    ]);
 
     const ideaRow = {
       id: updated.id,
@@ -240,19 +276,7 @@ export async function PATCH(
       fulfillmentType: updated.amazonListing?.fulfillmentType || "FBM",
     };
 
-    // Create audit logs
-    for (const entry of auditEntries) {
-      await db.auditLog.create({
-        data: {
-          entityType: "idea",
-          entityId: id,
-          fieldName: entry.field,
-          oldValue: entry.oldVal,
-          newValue: entry.newVal,
-          changedById: session.user.id,
-        },
-      });
-    }
+    // (Audit logs are now created in transaction)
 
     // Notifications
     // 1. Notify creator if manager/boss changes status

@@ -6,6 +6,8 @@ import { useSession } from "next-auth/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button"
 import { ButtonIconHover } from "@/components/shadcn-studio/button/button-04";
+import ButtonHeartbeatEffect from "@/components/shadcn-studio/button/button-46";
+import { DiffViewer, DiffField } from "@/components/ui/diff-viewer";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -178,7 +180,7 @@ export default function IdeaDetailPage() {
   const [actionType, setActionType] = useState<"approve" | "reject" | "revise" | null>(null);
   const [photoRevisionInput, setPhotoRevisionInput] = useState("");
   const [labelPrintQty, setLabelPrintQty] = useState(1);
-  const [autoNext, setAutoNext] = useState(true);
+  const [autoNext, setAutoNext] = useState(false);
 
   // Sheets
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -189,6 +191,8 @@ export default function IdeaDetailPage() {
   const [conflictData, setConflictData] = useState<any>(null);
   const [conflictBy, setConflictBy] = useState<string>("");
   const [conflictModalOpen, setConflictModalOpen] = useState(false);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
 
   const fetchConflictData = useCallback(async (updatedBy: string) => {
     try {
@@ -209,14 +213,14 @@ export default function IdeaDetailPage() {
 
     const handleDetailUpdated = (payload: any) => {
       if (payload.type !== "idea_detail_updated" || payload.ideaId !== id) return;
-      
+
       // Ignore if the updater is the current user
       if (payload.updatedById === session?.user?.id) return;
 
       if (editOpen) {
         // User is editing — quarantine new data, show conflict warning
         fetchConflictData(payload.updatedBy);
-        return; 
+        return;
       }
 
       // Read-only mode — auto-update in place
@@ -227,7 +231,7 @@ export default function IdeaDetailPage() {
         if (!oldList || !oldList.data) return oldList;
         return {
           ...oldList,
-          data: oldList.data.map((item: any) => 
+          data: oldList.data.map((item: any) =>
             item.id === payload.ideaId ? { ...item, ...payload.updatedData } : item
           )
         };
@@ -285,7 +289,7 @@ export default function IdeaDetailPage() {
         try { parsedLinks = JSON.parse(data.sourceLinks); } catch { }
       }
       setDimensionUnit("mm");
-      setIdeaForm({ 
+      setIdeaForm({
         prompt: data.prompt || "",
         topicId: data.topicId || "",
         aiModelId: data.aiModelId || "",
@@ -298,16 +302,32 @@ export default function IdeaDetailPage() {
         sourceLinks: parsedLinks.length > 0 ? parsedLinks : [""]
       });
 
-    } catch { toast.error("Lỗi tải ý tưởng"); }
-    finally { setLoading(false); }
+    } catch (error) {
+      console.error(error);
+      toast.error("Lỗi tải ý tưởng");
+    } finally {
+      setLoading(false);
+    }
   }, [id, router]);
+
+  const fetchAuditLogs = async () => {
+    try {
+      const res = await fetch(`/api/audit-logs?entityId=${id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setAuditLogs(data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch audit logs", error);
+    }
+  };
 
   useEffect(() => {
     fetchIdea();
     fetch("/api/selling-accounts").then((r) => r.json()).then(setSellingAccounts).catch(() => { });
-    fetch("/api/topics").then(r => r.json()).then(setTopics).catch(() => {});
-    fetch("/api/ai-models").then(r => r.json()).then(setAiModels).catch(() => {});
-    fetch("/api/partners").then(r => r.json()).then(setPartners).catch(() => {});
+    fetch("/api/topics").then(r => r.json()).then(setTopics).catch(() => { });
+    fetch("/api/ai-models").then(r => r.json()).then(setAiModels).catch(() => { });
+    fetch("/api/partners").then(r => r.json()).then(setPartners).catch(() => { });
   }, [fetchIdea]);
 
   // ─── Actions ──────────────────────────────────────────────────────
@@ -400,12 +420,12 @@ export default function IdeaDetailPage() {
       let w = ideaForm.widthCm ? Number(ideaForm.widthCm) : null;
       let h = ideaForm.heightCm ? Number(ideaForm.heightCm) : null;
       let t = ideaForm.thicknessMm ? Number(ideaForm.thicknessMm) : null;
-      
+
       // Convert UI unit to mm
       if (w !== null) w = dimensionUnit === "mm" ? w : dimensionUnit === "cm" ? w * 10 : w * 25.4;
       if (h !== null) h = dimensionUnit === "mm" ? h : dimensionUnit === "cm" ? h * 10 : h * 25.4;
       if (t !== null) t = dimensionUnit === "mm" ? t : dimensionUnit === "cm" ? t * 10 : t * 25.4;
-      
+
       // Convert mm to DB unit (w, h in cm; t in mm)
       if (w !== null) w = Number((w / 10).toFixed(2));
       if (h !== null) h = Number((h / 10).toFixed(2));
@@ -561,15 +581,10 @@ export default function IdeaDetailPage() {
                     {idea.msku}
                   </h1>
                   {statusBadge(idea.status, ideaStatusLabels)}
-                  {idea.needsReReview && (
-                    <div className="flex items-center gap-1">
-                      <Badge variant="destructive" className="animate-pulse text-[10px]">Sửa đổi mới</Badge>
-                      {(role === "manager" || role === "boss") && (
-                        <Button variant="ghost" size="icon" className="h-5 w-5" title="Đánh dấu đã xem" onClick={() => handleUpdateIdea({ needsReReview: false })} disabled={saving}>
-                          <Eye className="h-3 w-3" />
-                        </Button>
-                      )}
-                    </div>
+                  {idea.needsReReview && role === "employee" && (
+                    <Badge variant="destructive" className="animate-pulse text-[10px] px-2 py-0.5 bg-red-600 hover:bg-red-700 text-white font-semibold">
+                      Sửa đổi mới
+                    </Badge>
                   )}
 
                   <Badge variant="outline" className="text-[10px]">
@@ -806,6 +821,16 @@ export default function IdeaDetailPage() {
                     </AlertDialogContent>
                   )}
                 </AlertDialog>
+
+                {idea.needsReReview && (role === "boss" || role === "manager") && (
+                  <ButtonHeartbeatEffect 
+                    onClick={() => {
+                      fetchAuditLogs();
+                      setReviewModalOpen(true);
+                    }} 
+                    disabled={saving}
+                  />
+                )}
 
                 {idea.status === "revision_requested" && (idea.createdById === session?.user?.id || role === "boss" || role === "manager") && (
                   <Button variant="outline" size="sm" className="h-8 text-xs border-amber-300 text-amber-700 hover:bg-amber-50 ml-1.5" onClick={() => handleUpdateIdea({ status: "reviewing" })} disabled={saving}>
@@ -1238,10 +1263,9 @@ export default function IdeaDetailPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* ═══ Conflict Resolution Modal ═══ */}
+            {/* ═══ Conflict Resolution Modal ═══ */}
       <Dialog open={conflictModalOpen} onOpenChange={(open) => { if (!open) setConflictModalOpen(false); }}>
         <DialogContent showCloseButton={false} className="sm:max-w-5xl max-h-[90vh] p-0 flex flex-col z-[300] overflow-hidden">
-          {/* Header */}
           <div className="shrink-0 px-6 pt-6 pb-4 border-b">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-base">
@@ -1249,12 +1273,11 @@ export default function IdeaDetailPage() {
                 Xung đột dữ liệu
               </DialogTitle>
               <p className="text-sm text-muted-foreground mt-1">
-                <strong>{conflictBy}</strong> vừa cập nhật ý tưởng này. So sánh và chọn phiên bản phù hợp.
+                <strong>{conflictBy}</strong> vừa cập nhật ý tưởng này. Bạn có thể đồng bộ từng trường hoặc ghi đè toàn bộ.
               </p>
             </DialogHeader>
           </div>
 
-          {/* Body — scrollable */}
           {conflictData && (() => {
             const myTopic = topics.find((t: any) => t.id === ideaForm.topicId)?.name || ideaForm.topicId;
             const serverTopic = conflictData.topic?.name || "";
@@ -1269,74 +1292,46 @@ export default function IdeaDetailPage() {
             const myPrompt = ideaForm.prompt || "—";
             const serverPrompt = conflictData.prompt || "—";
 
-            const fields = [
-              { key: "topic", label: "Chủ đề sản phẩm", mine: myTopic, server: serverTopic },
-              { key: "model", label: "AI Model", mine: myModel, server: serverModel },
-              { key: "dims", label: "Kích thước", mine: myDims, server: serverDims },
-              { key: "material", label: "Vật liệu", mine: myMaterial, server: serverMaterial },
-              { key: "links", label: "Source Links", mine: myLinks, server: serverLinks },
+            const fields: DiffField[] = [
+              { key: "topicId", label: "Chủ đề sản phẩm", leftVal: myTopic, rightVal: serverTopic },
+              { key: "aiModelId", label: "AI Model", leftVal: myModel, rightVal: serverModel },
+              { key: "dims", label: "Kích thước", leftVal: myDims, rightVal: serverDims },
+              { key: "material", label: "Vật liệu", leftVal: myMaterial, rightVal: serverMaterial },
+              { key: "sourceLinks", label: "Source Links", leftVal: myLinks, rightVal: serverLinks },
+              { key: "prompt", label: "Prompt", leftVal: myPrompt, rightVal: serverPrompt, isLongText: true },
             ];
 
+            const handleSyncField = (key: string) => {
+              if (key === "dims") {
+                setIdeaForm(prev => ({
+                  ...prev,
+                  widthCm: conflictData.widthCm ? (conflictData.widthCm * 10).toString() : "",
+                  heightCm: conflictData.heightCm ? (conflictData.heightCm * 10).toString() : "",
+                  thicknessMm: conflictData.thicknessMm ? conflictData.thicknessMm.toString() : "",
+                }));
+                setDimensionUnit("mm");
+              } else if (key === "sourceLinks") {
+                const parsedLinks = (() => { try { return JSON.parse(conflictData.sourceLinks || "[]"); } catch { return [""]; } })();
+                setIdeaForm(prev => ({ ...prev, sourceLinks: parsedLinks.length > 0 ? parsedLinks : [""] }));
+              } else {
+                setIdeaForm(prev => ({ ...prev, [key]: conflictData[key] || "" }));
+              }
+            };
+
             return (
-              <div className="flex-1 overflow-y-auto px-6 py-4">
-                {/* Column headers */}
-                <div className="grid grid-cols-2 gap-x-6 mb-2">
-                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider pb-2 border-b">🟠 Phiên bản của bạn</div>
-                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider pb-2 border-b">🟢 Phiên bản trên Server</div>
-                </div>
-
-                {/* Short fields */}
-                <div className="grid grid-cols-2 gap-x-6">
-                  {fields.map(f => {
-                    const isDiff = f.mine !== f.server;
-                    return (
-                      <Fragment key={f.key}>
-                        <div className={`py-2.5 border-b ${isDiff ? "border-l-4 border-l-amber-500 bg-amber-50/50 dark:bg-amber-950/20 pl-3" : "pl-1"}`}>
-                          <div className="text-[10px] text-muted-foreground mb-0.5">{f.label}</div>
-                          <div className="text-sm break-words whitespace-pre-wrap">{f.mine}</div>
-                        </div>
-                        <div className={`py-2.5 border-b ${isDiff ? "border-l-4 border-l-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 pl-3" : "pl-1"}`}>
-                          <div className="text-[10px] text-muted-foreground mb-0.5">{f.label}</div>
-                          <div className="text-sm break-words whitespace-pre-wrap">{f.server}</div>
-                        </div>
-                      </Fragment>
-                    );
-                  })}
-                </div>
-
-                {/* Prompt — full width with individual scroll */}
-                <div className="mt-5">
-                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider pb-2 mb-2 border-b">Prompt</div>
-                  {myPrompt !== serverPrompt ? (
-                    <div className="grid grid-cols-2 gap-x-6">
-                      <div className="border-l-4 border-l-amber-500 bg-amber-50/50 dark:bg-amber-950/20 pl-3 pr-2 py-3 rounded-r">
-                        <div className="text-[10px] text-muted-foreground mb-1.5 font-medium">Bản của bạn</div>
-                        <ScrollArea className="max-h-[250px]">
-                          <div className="text-sm whitespace-pre-wrap break-words pr-3">{myPrompt}</div>
-                        </ScrollArea>
-                      </div>
-                      <div className="border-l-4 border-l-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 pl-3 pr-2 py-3 rounded-r">
-                        <div className="text-[10px] text-muted-foreground mb-1.5 font-medium">Bản trên server</div>
-                        <ScrollArea className="max-h-[250px]">
-                          <div className="text-sm whitespace-pre-wrap break-words pr-3">{serverPrompt}</div>
-                        </ScrollArea>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground italic">Prompt không thay đổi.</div>
-                  )}
-                </div>
-              </div>
+              <DiffViewer 
+                fields={fields} 
+                onSyncField={handleSyncField} 
+              />
             );
           })()}
 
-          {/* Footer — fixed at bottom */}
           <div className="shrink-0 flex justify-end gap-2 px-6 py-4 border-t bg-muted/20">
             <Button variant="outline" onClick={() => setConflictModalOpen(false)}>
               Đóng
             </Button>
             <Button
-              variant="default"
+              variant="secondary"
               onClick={() => {
                 const parsedLinks = (() => { try { return JSON.parse(conflictData.sourceLinks || "[]"); } catch { return [""]; } })();
                 setDimensionUnit("mm");
@@ -1355,22 +1350,118 @@ export default function IdeaDetailPage() {
                 setIdea(conflictData);
                 setConflictData(null);
                 setConflictModalOpen(false);
-                toast.success("Đã áp dụng phiên bản mới từ server.");
+                toast.success("Đã áp dụng toàn bộ phiên bản từ server.");
               }}
             >
-              <RefreshCw className="h-4 w-4 mr-1" /> Chấp nhận bản mới
+              <RefreshCw className="h-4 w-4 mr-1" /> Lấy toàn bộ từ Server
             </Button>
             <Button
-              variant="destructive"
+              variant="default"
               onClick={() => handleSaveIdea(conflictData.version)}
               disabled={saving}
             >
               {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
-              Ghi đè bản của tôi
+              Lưu bản gộp (Merge & Save)
             </Button>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ═══ Manager Review Modal ═══ */}
+      <Dialog open={reviewModalOpen} onOpenChange={(open) => { if (!open) setReviewModalOpen(false); }}>
+        <DialogContent showCloseButton={true} className="sm:max-w-5xl max-h-[90vh] p-0 flex flex-col z-[300] overflow-hidden">
+          <div className="shrink-0 px-6 pt-6 pb-4 border-b">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-base">
+                <Check className="h-5 w-5 text-emerald-500" />
+                Duyệt thay đổi mới
+              </DialogTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                Nhân viên đã cập nhật các thông tin sau.
+              </p>
+            </DialogHeader>
+          </div>
+
+          <div className="flex-1 overflow-y-auto">
+            {auditLogs.length > 0 ? (() => {
+              const fieldsMap: Record<string, string> = {
+                prompt: "Prompt",
+                topicId: "Chủ đề sản phẩm",
+                aiModelId: "AI Model",
+                widthCm: "Chiều dài (cm)",
+                heightCm: "Chiều rộng (cm)",
+                thicknessMm: "Độ dày (mm)",
+                material: "Vật liệu",
+                sourceLinks: "Source Links",
+                source: "Nguồn ý tưởng",
+                partnerId: "Partner",
+              };
+
+              const diffFields = auditLogs.map(log => {
+                let leftVal = log.oldValue || "—";
+                let rightVal = log.newValue || "—";
+                
+                // Format links
+                if (log.fieldName === "sourceLinks") {
+                  try {
+                    if (leftVal !== "—") leftVal = (JSON.parse(leftVal) as string[]).join("\n") || "—";
+                    if (rightVal !== "—") rightVal = (JSON.parse(rightVal) as string[]).join("\n") || "—";
+                  } catch {}
+                }
+                
+                // Format topics and models if possible (we might not have names here without fetch, so we just show IDs or best effort)
+                // Actually we can map using topics array
+                if (log.fieldName === "topicId") {
+                  leftVal = topics.find((t: any) => t.id === leftVal)?.name || leftVal;
+                  rightVal = topics.find((t: any) => t.id === rightVal)?.name || rightVal;
+                }
+                if (log.fieldName === "aiModelId") {
+                  leftVal = aiModels.find((m: any) => m.id === leftVal)?.name || leftVal;
+                  rightVal = aiModels.find((m: any) => m.id === rightVal)?.name || rightVal;
+                }
+
+                return {
+                  key: log.fieldName,
+                  label: fieldsMap[log.fieldName] || log.fieldName,
+                  leftVal,
+                  rightVal,
+                  isLongText: log.fieldName === "prompt"
+                };
+              });
+
+              return (
+                <DiffViewer 
+                  fields={diffFields} 
+                  leftTitle="Bản cũ" 
+                  rightTitle="Bản mới cập nhật"
+                  readOnly={true}
+                />
+              );
+            })() : (
+              <div className="p-8 text-center text-muted-foreground">Không tìm thấy chi tiết thay đổi hoặc dữ liệu cũ.</div>
+            )}
+          </div>
+
+          <div className="shrink-0 flex justify-end gap-2 px-6 py-4 border-t bg-muted/20">
+            <Button variant="outline" onClick={() => setReviewModalOpen(false)}>
+              Đóng
+            </Button>
+            <Button
+              variant="default"
+              onClick={() => {
+                handleUpdateIdea({ needsReReview: false });
+                setReviewModalOpen(false);
+              }}
+              disabled={saving}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Check className="h-4 w-4 mr-1" />}
+              Xác nhận đã xem
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
     </TooltipProvider>
   );
 }

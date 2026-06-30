@@ -1,0 +1,12 @@
+
+> app@0.1.0 dev
+> node server.mjs -p 3001
+
+⨯ Another next dev server is already running.
+
+- Local:        http://localhost:3000
+- PID:          37291
+- Dir:          /Volumes/SSD/Code/Ligon Team/app
+- Log:          .next/dev/logs/next-development.log
+
+Run kill 37291 to stop it.
