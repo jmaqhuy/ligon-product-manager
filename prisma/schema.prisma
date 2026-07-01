@@ -19,7 +19,7 @@ model User {
   passwordHash         String   @map("password_hash")
   fullName             String   @map("full_name")
   nameAbbreviation     String   @map("name_abbreviation")
-  role                 String   @default("employee") // employee | manager | boss
+  role                 String   @default("employee") // employee | worker | manager | boss
   status               String   @default("active") // active | inactive
   startDate            DateTime @default(now()) @map("start_date")
   avatarUrl            String?  @map("avatar_url")
@@ -35,9 +35,11 @@ model User {
   sellingAccounts      SellingAccount[] @relation("AccountCreatedBy")
   notifications   Notification[]
   auditLogs       AuditLog[]
-  ordersDesigned  Order[]          @relation("OrderDesigner")
-  ordersProduced  Order[]          @relation("OrderProducer")
+  ordersDesigned  Order[]             @relation("OrderDesigner")
+  ordersProduced  Order[]             @relation("OrderProducer")
   ideaDraft       IdeaDraft?
+  verifiedLayouts ProductionLayout[]  @relation("LayoutVerifier")
+  layoutAssignments ProductionRequest[] @relation("LayoutAssignee")
 
   @@map("users")
 }
@@ -84,6 +86,7 @@ model Idea {
   etsyListing        EtsyListing?
   productionRequests ProductionRequest[]
   shipmentItems      ShipmentItem[]
+  layoutItems        ProductionLayoutItem[]
   partner            Partner?            @relation(fields: [partnerId], references: [id])
 
   @@map("ideas")
@@ -203,14 +206,18 @@ model ProductionRequest {
   completedAt    DateTime? @map("completed_at")
   noteForWorkers String?   @map("note_for_workers")
   shipped        Boolean   @default(false)
-  version        Int       @default(1)
+  status            String    @default("ready") @map("status") // awaiting_layout | ready | producing | completed
+  layoutSnapshot    String?   @map("layout_snapshot") // JSON snapshot của layout plan
+  layoutAssigneeId  String?   @map("layout_assignee_id") // Người nhận làm file layout
+  version           Int       @default(1)
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  idea  Idea             @relation(fields: [ideaId], references: [id])
-  steps ProductionStep[]
-  shipmentItems ShipmentItem[]
+  idea           Idea             @relation(fields: [ideaId], references: [id])
+  steps          ProductionStep[]
+  shipmentItems  ShipmentItem[]
+  layoutAssignee User?            @relation("LayoutAssignee", fields: [layoutAssigneeId], references: [id])
 
   @@map("production_requests")
 }
@@ -479,4 +486,41 @@ model IdeaDraft {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("idea_drafts")
+}
+
+// ============================
+// Module 14: Production Layouts (Ganging/Nesting)
+// ============================
+model ProductionLayout {
+  id              String   @id @default(cuid())
+  code            String   @unique // e.g., LAYOUT-BABY-SIGN-001
+  name            String?  // Human-readable name
+  materialCode    String   @map("material_code") // e.g., BW-3-MXL, BW-2-T, ACRYLIC-3MM
+  materialWidth   Float    @map("material_width") // Phôi rộng (mm)
+  materialLength  Float    @map("material_length") // Phôi dài (mm)
+  dxfFileUrl      String   @map("dxf_file_url") // File cắt laser (bắt buộc)
+  pdfFileUrl      String?  @map("pdf_file_url") // File in UV (tùy chọn)
+  status          String   @default("active") // active | archived
+  isVerified      Boolean  @default(false) @map("is_verified")
+  verifiedById    String?  @map("verified_by_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  items      ProductionLayoutItem[]
+  verifiedBy User?                 @relation("LayoutVerifier", fields: [verifiedById], references: [id])
+
+  @@map("production_layouts")
+}
+
+model ProductionLayoutItem {
+  id                 String   @id @default(cuid())
+  productionLayoutId String   @map("production_layout_id")
+  ideaId             String   @map("idea_id")
+  quantityPerRun     Int      @map("quantity_per_run") // Số lượng sản phẩm này trong 1 lần chạy
+
+  productionLayout ProductionLayout @relation(fields: [productionLayoutId], references: [id], onDelete: Cascade)
+  idea             Idea             @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+
+  @@unique([productionLayoutId, ideaId])
+  @@map("production_layout_items")
 }

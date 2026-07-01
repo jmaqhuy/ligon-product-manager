@@ -130,6 +130,48 @@ export const orderProductionStatusLabels: Record<OrderProductionStatus, string> 
 
 export const roleLabels: Record<Role, string> = {
   employee: "Nhân viên",
+  worker: "Công nhân",
   manager: "Quản lý",
   boss: "Sếp",
+};
+
+// ── Production Layout ──
+export const LAYOUT_STATUSES = ["active", "archived"] as const;
+export type LayoutStatus = (typeof LAYOUT_STATUSES)[number];
+
+export const layoutStatusLabels: Record<LayoutStatus, string> = {
+  active: "Đang dùng",
+  archived: "Đã lưu trữ",
+};
+
+export const PRODUCTION_REQUEST_STATUSES = ["awaiting_layout", "ready", "producing", "completed"] as const;
+export type ProductionRequestStatus = (typeof PRODUCTION_REQUEST_STATUSES)[number];
+
+export const productionRequestStatusLabels: Record<ProductionRequestStatus, string> = {
+  awaiting_layout: "Đang chờ File thiết kế",
+  ready: "Sẵn sàng sản xuất",
+  producing: "Đang sản xuất",
+  completed: "Hoàn thành",
+};
+
+export const SUGGESTION_TYPES = ["overproduction", "cross_sell", "no_layout", "critical_waste"] as const;
+export type SuggestionType = (typeof SUGGESTION_TYPES)[number];
+
+export const LAYOUT_REPORT_REASONS = [
+  "file_corrupted",
+  "high_waste",
+  "wrong_thickness",
+  "burn_marks",
+  "wrong_dimensions",
+  "other",
+] as const;
+export type LayoutReportReason = (typeof LAYOUT_REPORT_REASONS)[number];
+
+export const layoutReportReasonLabels: Record<LayoutReportReason, string> = {
+  file_corrupted: "File hỏng / không mở được",
+  high_waste: "Hao hụt thực tế quá cao",
+  wrong_thickness: "Sai độ dày vật liệu",
+  burn_marks: "Đường nét quá sát, gây cháy cạnh",
+  wrong_dimensions: "Sai kích thước phôi",
+  other: "Khác",
 };

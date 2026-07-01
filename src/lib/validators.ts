@@ -152,6 +152,31 @@ export const batchOperationSchema = z.object({
   assigneeId: z.string().uuid().optional(),
 });
 
+// ── Production Layouts ──
+export const createProductionLayoutSchema = z.object({
+  code: z.string().max(50).regex(/^[A-Z0-9\-]*$/, "Code chỉ chứa chữ in hoa, số, dấu gạch ngang").optional().default(""),
+  name: z.string().max(200).optional(),
+  materialCode: z.string().min(1, "Vật liệu không được để trống"),
+  materialWidth: z.number().positive("Chiều rộng phải > 0"),
+  materialLength: z.number().positive("Chiều dài phải > 0"),
+  dxfFileUrl: z.string().min(1, "File DXF không được để trống"),
+  pdfFileUrl: z.string().optional(),
+  items: z.array(z.object({
+    ideaId: z.string().min(1),
+    quantityPerRun: z.number().int().min(1, "Số lượng phải >= 1"),
+  })).min(1, "Cần ít nhất 1 SKU"),
+  requestIds: z.array(z.string().min(1)).optional().default([]),
+});
+
+export const createProductionLayoutRequestSchema = z.object({
+  type: z.enum(["layout_requested", "layout_revision_requested"]),
+  layoutId: z.string().optional(),
+  ideaIds: z.array(z.string().min(1)).min(1, "Cần ít nhất 1 SKU"),
+  materialCode: z.string().optional(),
+  reason: z.string().optional(),
+  note: z.string().max(1000).optional(),
+});
+
 // ── Type exports ──
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
@@ -164,3 +189,5 @@ export type CreateProductionInput = z.infer<typeof createProductionSchema>;
 export type CreateShipmentInput = z.infer<typeof createShipmentSchema>;
 export type CreateSellingAccountInput = z.infer<typeof createSellingAccountSchema>;
 export type BatchOperationInput = z.infer<typeof batchOperationSchema>;
+export type CreateProductionLayoutInput = z.infer<typeof createProductionLayoutSchema>;
+export type CreateProductionLayoutRequestInput = z.infer<typeof createProductionLayoutRequestSchema>;

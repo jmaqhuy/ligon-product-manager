@@ -18,6 +18,8 @@ import {
   Bot,
   Handshake,
   BookOpen,
+  Layers,
+  ClipboardList,
 } from "lucide-react";
 import {
   Sidebar,
@@ -60,6 +62,16 @@ const navItems = [
     title: "Sản xuất",
     href: "/production",
     icon: Factory,
+  },
+  {
+    title: "File SX",
+    href: "/production/layouts",
+    icon: Layers,
+  },
+  {
+    title: "Công việc",
+    href: "/my-tasks",
+    icon: ClipboardList,
   },
   {
     title: "Đơn hàng",
@@ -125,9 +137,11 @@ export function AppSidebar() {
                   <Image 
                     src="/logo.svg" 
                     alt="Logo" 
-                    width={120} 
-                    height={32} 
+                    width={429} 
+                    height={512} 
                     className="h-full w-auto object-contain"
+                    priority
+                    unoptimized
                   />
                 </div>
                 <div className="grid flex-1 text-left leading-tight">

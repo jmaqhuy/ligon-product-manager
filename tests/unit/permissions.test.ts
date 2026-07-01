@@ -28,6 +28,8 @@ describe("permissions — can()", () => {
     it("cannot view all stats", () => expect(can(role, "view_all_stats")).toBe(false));
     it("cannot create production request", () => expect(can(role, "create_production_request")).toBe(false));
     it("cannot change fulfillment type", () => expect(can(role, "change_fulfillment_type")).toBe(false));
+    it("can create production layout", () => expect(can(role, "create_production_layout")).toBe(true));
+    it("cannot manage production layouts (edit/delete)", () => expect(can(role, "manage_production_layouts")).toBe(false));
   });
 
   describe("manager", () => {
@@ -47,6 +49,19 @@ describe("permissions — can()", () => {
     it("cannot manage managers", () => expect(can(role, "manage_manager")).toBe(false));
   });
 
+  describe("worker", () => {
+    const role: Role = "worker";
+
+    it("can update production", () => expect(can(role, "update_production")).toBe(true));
+    it("can manage orders", () => expect(can(role, "manage_orders")).toBe(true));
+    it("can manage shipments", () => expect(can(role, "manage_shipments")).toBe(true));
+    it("can verify production layout", () => expect(can(role, "verify_production_layout")).toBe(true));
+
+    it("cannot approve ideas", () => expect(can(role, "approve_idea")).toBe(false));
+    it("cannot manage production layouts", () => expect(can(role, "manage_production_layouts")).toBe(false));
+    it("cannot create production layout", () => expect(can(role, "create_production_layout")).toBe(false));
+  });
+
   describe("boss", () => {
     const role: Role = "boss";
 
@@ -59,6 +74,8 @@ describe("permissions — can()", () => {
         "view_own_stats", "view_all_stats", "create_production_request",
         "update_production", "manage_orders", "manage_shipments",
         "change_fulfillment_type", "edit_own_profile",
+        "manage_production_layouts", "verify_production_layout",
+        "create_production_layout",
       ] as const;
 
       for (const action of allActions) {
@@ -89,6 +106,10 @@ describe("permissions — canManageUser()", () => {
     expect(canManageUser("manager", "employee")).toBe(true);
   });
 
+  it("manager can manage worker", () => {
+    expect(canManageUser("manager", "worker")).toBe(true);
+  });
+
   it("manager cannot manage manager", () => {
     expect(canManageUser("manager", "manager")).toBe(false);
   });
@@ -99,14 +120,27 @@ describe("permissions — canManageUser()", () => {
 
   it("employee cannot manage anyone", () => {
     expect(canManageUser("employee", "employee")).toBe(false);
+    expect(canManageUser("employee", "worker")).toBe(false);
     expect(canManageUser("employee", "manager")).toBe(false);
     expect(canManageUser("employee", "boss")).toBe(false);
+  });
+
+  it("worker cannot manage anyone", () => {
+    expect(canManageUser("worker", "employee")).toBe(false);
+    expect(canManageUser("worker", "worker")).toBe(false);
+    expect(canManageUser("worker", "manager")).toBe(false);
+    expect(canManageUser("worker", "boss")).toBe(false);
+  });
+
+  it("boss can manage worker", () => {
+    expect(canManageUser("boss", "worker")).toBe(true);
   });
 });
 
 describe("permissions — getRoleLabel()", () => {
   it("returns Vietnamese labels", () => {
     expect(getRoleLabel("employee")).toBe("Nhân viên");
+    expect(getRoleLabel("worker")).toBe("Công nhân");
     expect(getRoleLabel("manager")).toBe("Quản lý");
     expect(getRoleLabel("boss")).toBe("Sếp");
   });
@@ -115,10 +149,12 @@ describe("permissions — getRoleLabel()", () => {
 describe("permissions — getRoleOrder()", () => {
   it("returns correct hierarchy ordering", () => {
     const employee = getRoleOrder("employee");
+    const worker = getRoleOrder("worker");
     const manager = getRoleOrder("manager");
     const boss = getRoleOrder("boss");
 
-    expect(employee).toBeLessThan(manager);
+    expect(employee).toBeLessThan(worker);
+    expect(worker).toBeLessThan(manager);
     expect(manager).toBeLessThan(boss);
   });
 });

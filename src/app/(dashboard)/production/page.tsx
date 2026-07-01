@@ -56,6 +56,10 @@ import {
   Image as ImageIcon,
   FileText,
   ArrowLeft,
+  Layers,
+  Download,
+  AlertTriangle,
+  ShieldCheck,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { format } from "date-fns";
@@ -176,20 +180,30 @@ function StepProgress({ steps, onAction }: { steps: any[]; onAction: (stepId: st
   );
 }
 
-// ─── Create dialog ──────────────────────────────────────────────────
+// ─── Create dialog (enhanced with layout suggestion) ────────────────
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+// ─── Multi-SKU Create Production Dialog ─────────────────────────────
 function CreateProductionDialog({ onCreated }: { onCreated: () => void }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [ideaSearch, setIdeaSearch] = useState("");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [ideaResults, setIdeaResults] = useState<any[]>([]);
-  const [selectedIdeaId, setSelectedIdeaId] = useState("");
-  const [selectedIdeaName, setSelectedIdeaName] = useState("");
-  const [type, setType] = useState("batch");
-  const [priority, setPriority] = useState("normal");
-  const [qty, setQty] = useState("1");
-  const [note, setNote] = useState("");
+
+  // Batch requests table
+  interface RequestRow {
+    ideaId: string;
+    msku: string;
+    requestedQty: number;
+    type: string;
+    priority: string;
+    note: string;
+  }
+  const [rows, setRows] = useState<RequestRow[]>([]);
+
+  // Shared settings
+  const [awaitingLayout, setAwaitingLayout] = useState(false);
+  const [designerNote, setDesignerNote] = useState("");
 
   const searchIdeas = useCallback(async (q: string) => {
     if (!q || q.length < 2) { setIdeaResults([]); return; }
@@ -203,7 +217,6 @@ function CreateProductionDialog({ onCreated }: { onCreated: () => void }) {
         if (a.status !== "approved" && b.status === "approved") return 1;
         return 0;
       });
-
       setIdeaResults(sorted.slice(0, 20));
     } catch {
       setIdeaResults([]);
@@ -215,9 +228,34 @@ function CreateProductionDialog({ onCreated }: { onCreated: () => void }) {
     return () => clearTimeout(timer);
   }, [ideaSearch, searchIdeas]);
 
+  const addRow = (idea: { id: string; msku: string }) => {
+    if (rows.some((r) => r.ideaId === idea.id)) return;
+    setRows([
+      ...rows,
+      { ideaId: idea.id, msku: idea.msku, requestedQty: 1, type: "batch", priority: "normal", note: "" },
+    ]);
+    setIdeaSearch("");
+    setIdeaResults([]);
+  };
+
+  const removeRow = (ideaId: string) => {
+    setRows(rows.filter((r) => r.ideaId !== ideaId));
+  };
+
+  const updateRow = (ideaId: string, field: keyof RequestRow, value: string | number) => {
+    setRows(rows.map((r) => (r.ideaId === ideaId ? { ...r, [field]: value } : r)));
+  };
+
   const handleSubmit = async () => {
-    if (!selectedIdeaId) { toast.error("Vui lòng chọn ý tưởng"); return; }
-    if (!qty || parseInt(qty) < 1) { toast.error("Số lượng phải >= 1"); return; }
+    if (rows.length === 0) {
+      toast.error("Vui lòng chọn ít nhất 1 SKU");
+      return;
+    }
+    const invalidQty = rows.find((r) => !r.requestedQty || r.requestedQty < 1);
+    if (invalidQty) {
+      toast.error(`SKU ${invalidQty.msku}: số lượng phải >= 1`);
+      return;
+    }
 
     setSaving(true);
     try {
@@ -225,21 +263,22 @@ function CreateProductionDialog({ onCreated }: { onCreated: () => void }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ideaId: selectedIdeaId,
-          type,
-          priority,
-          requestedQty: parseInt(qty),
-          noteForWorkers: note || null,
+          requests: rows.map((r) => ({
+            ideaId: r.ideaId,
+            type: r.type,
+            priority: r.priority,
+            requestedQty: r.requestedQty,
+            noteForWorkers: r.note || undefined,
+          })),
+          awaitingLayout,
+          designerNote: designerNote || undefined,
         }),
-        successMessage: "Đã tạo yêu cầu sản xuất!",
+        successMessage: awaitingLayout
+          ? `Đã tạo ${rows.length} lệnh (chờ file layout)!`
+          : `Đã tạo ${rows.length} lệnh sản xuất!`,
       });
       if (data) {
-        setOpen(false);
-        setSelectedIdeaId("");
-        setSelectedIdeaName("");
-        setIdeaSearch("");
-        setQty("1");
-        setNote("");
+        resetDialog();
         onCreated();
       }
     } finally {
@@ -247,129 +286,202 @@ function CreateProductionDialog({ onCreated }: { onCreated: () => void }) {
     }
   };
 
+  const resetDialog = () => {
+    setOpen(false);
+    setIdeaSearch("");
+    setRows([]);
+    setAwaitingLayout(false);
+    setDesignerNote("");
+  };
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(v) => { if (!v) resetDialog(); else setOpen(v); }}>
       <DialogTrigger asChild>
         <Button size="sm" className="h-8">
           <Plus className="mr-1.5 h-3.5 w-3.5" />
           Tạo yêu cầu
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[750px] max-h-[85vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle>Tạo yêu cầu sản xuất</DialogTitle>
-          <DialogDescription>Chọn ý tưởng và cấu hình thông tin sản xuất</DialogDescription>
+          <DialogTitle>Tạo yêu cầu sản xuất (Đa SKU)</DialogTitle>
+          <DialogDescription>
+            Chọn nhiều SKU cùng lúc — mỗi SKU là một dòng trong bảng bên dưới
+          </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
-          {/* Idea search */}
-          <div className="space-y-1.5">
-            <Label>Ý tưởng (MSKU)</Label>
-            {selectedIdeaId ? (
-              <div className="flex items-center gap-2">
-                <Badge variant="secondary" className="text-sm">{selectedIdeaName}</Badge>
-                <Button type="button" variant="ghost" size="sm" onClick={() => { setSelectedIdeaId(""); setSelectedIdeaName(""); }}>
-                  Đổi
-                </Button>
-              </div>
-            ) : (
-              <>
-                <Input
-                  placeholder="Tìm theo MSKU..."
-                  value={ideaSearch}
-                  onChange={(e) => setIdeaSearch(e.target.value)}
-                />
-                {ideaResults.length > 0 && (
-                  <div className="border rounded-md max-h-[250px] overflow-y-auto divide-y divide-border">
-                    {ideaResults.map((idea) => {
-                      const isApproved = idea.status === "approved";
-                      let reason = "";
-                      if (!isApproved) {
-                        if (idea.status === "reviewing") {
-                          reason = "sản phẩm chưa được duyệt";
-                        } else if (idea.status === "revision_requested") {
-                          reason = "sản phẩm đang sửa";
-                        } else if (idea.status === "rejected") {
-                          reason = "sản phẩm bị loại";
-                        } else {
-                          reason = "chưa được duyệt";
-                        }
-                      }
-
-                      return (
-                        <button
-                          key={idea.id}
-                          type="button"
-                          disabled={!isApproved}
-                          className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between transition-colors ${isApproved
-                              ? "hover:bg-muted cursor-pointer"
-                              : "opacity-60 cursor-not-allowed bg-muted/10"
-                            }`}
-                          onClick={() => {
-                            if (!isApproved) return;
-                            setSelectedIdeaId(idea.id);
-                            setSelectedIdeaName(idea.msku);
-                            setIdeaSearch("");
-                            setIdeaResults([]);
-                          }}
-                        >
-                          <div className="min-w-0 flex-1">
-                            <span className="font-mono font-medium block truncate">{idea.msku}</span>
-                            <span className="text-xs text-muted-foreground truncate block">{idea.topicName}</span>
-                          </div>
-                          {!isApproved && (
-                            <Badge variant="destructive" className="text-[10px] whitespace-nowrap ml-2 shrink-0 py-0 h-5">
-                              {reason}
-                            </Badge>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </>
-            )}
+        {/* SKU Search */}
+        <div className="space-y-1.5 shrink-0">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Tìm MSKU để thêm vào danh sách..."
+              value={ideaSearch}
+              onChange={(e) => setIdeaSearch(e.target.value)}
+              className="pl-8"
+            />
           </div>
-
-          <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-1.5">
-              <Label>Loại</Label>
-              <Select value={type} onValueChange={setType}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="batch">Batch</SelectItem>
-                  <SelectItem value="sample">Sample</SelectItem>
-                </SelectContent>
-              </Select>
+          {ideaResults.length > 0 && (
+            <div className="border rounded-md max-h-[200px] overflow-y-auto divide-y">
+              {ideaResults.map((idea) => {
+                const isApproved = idea.status === "approved";
+                const alreadyAdded = rows.some((r) => r.ideaId === idea.id);
+                return (
+                  <button
+                    key={idea.id}
+                    type="button"
+                    disabled={!isApproved || alreadyAdded}
+                    className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between transition-colors ${
+                      isApproved && !alreadyAdded
+                        ? "hover:bg-muted cursor-pointer"
+                        : "opacity-50 cursor-not-allowed bg-muted/10"
+                    }`}
+                    onClick={() => { if (isApproved && !alreadyAdded) addRow(idea); }}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <span className="font-mono font-medium block truncate">{idea.msku}</span>
+                      <span className="text-xs text-muted-foreground truncate block">{idea.topicName}</span>
+                    </div>
+                    {alreadyAdded && (
+                      <Badge variant="secondary" className="text-[10px] ml-2 shrink-0">Đã thêm</Badge>
+                    )}
+                    {!isApproved && (
+                      <Badge variant="destructive" className="text-[10px] ml-2 shrink-0">Chưa duyệt</Badge>
+                    )}
+                  </button>
+                );
+              })}
             </div>
-            <div className="space-y-1.5">
-              <Label>Ưu tiên</Label>
-              <Select value={priority} onValueChange={setPriority}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="normal">Bình thường</SelectItem>
-                  <SelectItem value="priority">Ưu tiên</SelectItem>
-                  <SelectItem value="urgent">Khẩn cấp</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Số lượng</Label>
-              <Input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} />
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Ghi chú cho công nhân</Label>
-            <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Lưu ý đặc biệt..." />
-          </div>
+          )}
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>Huỷ</Button>
-          <Button onClick={handleSubmit} disabled={saving}>
+        {/* SKU Table */}
+        {rows.length > 0 && (
+          <div className="flex-1 min-h-0 border rounded-md overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30 shrink-0">
+              <span className="text-xs font-semibold">
+                Danh sách lệnh ({rows.length} SKU)
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 text-xs text-muted-foreground"
+                onClick={() => setRows([])}
+              >
+                Xoá tất cả
+              </Button>
+            </div>
+            <ScrollArea className="flex-1">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b bg-muted/20 sticky top-0">
+                    <th className="text-left px-2 py-1.5 font-medium w-8">#</th>
+                    <th className="text-left px-2 py-1.5 font-medium">SKU</th>
+                    <th className="text-center px-2 py-1.5 font-medium w-20">SL cần</th>
+                    <th className="text-center px-2 py-1.5 font-medium w-20">Loại</th>
+                    <th className="text-center px-2 py-1.5 font-medium w-20">Ưu tiên</th>
+                    <th className="text-left px-2 py-1.5 font-medium">Ghi chú</th>
+                    <th className="text-center px-2 py-1.5 font-medium w-8"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {rows.map((row, idx) => (
+                    <tr key={row.ideaId} className="hover:bg-muted/30">
+                      <td className="px-2 py-1 text-muted-foreground">{idx + 1}</td>
+                      <td className="px-2 py-1">
+                        <Badge variant="secondary" className="font-mono text-[10px] py-0">
+                          {row.msku}
+                        </Badge>
+                      </td>
+                      <td className="px-2 py-1">
+                        <Input
+                          type="number"
+                          min={1}
+                          className="h-7 w-16 text-xs text-center mx-auto"
+                          value={row.requestedQty}
+                          onChange={(e) => updateRow(row.ideaId, "requestedQty", parseInt(e.target.value) || 0)}
+                        />
+                      </td>
+                      <td className="px-2 py-1">
+                        <Select value={row.type} onValueChange={(v) => updateRow(row.ideaId, "type", v)}>
+                          <SelectTrigger className="h-7 text-[10px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="batch">Batch</SelectItem>
+                            <SelectItem value="sample">Sample</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </td>
+                      <td className="px-2 py-1">
+                        <Select value={row.priority} onValueChange={(v) => updateRow(row.ideaId, "priority", v)}>
+                          <SelectTrigger className="h-7 text-[10px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="normal">Thường</SelectItem>
+                            <SelectItem value="priority">Ưu tiên</SelectItem>
+                            <SelectItem value="urgent">Khẩn</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </td>
+                      <td className="px-2 py-1">
+                        <Input
+                          placeholder="Ghi chú..."
+                          className="h-7 text-[10px]"
+                          value={row.note}
+                          onChange={(e) => updateRow(row.ideaId, "note", e.target.value)}
+                        />
+                      </td>
+                      <td className="px-2 py-1 text-center">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-red-500 hover:text-red-700"
+                          onClick={() => removeRow(row.ideaId)}
+                        >
+                          ×
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </ScrollArea>
+          </div>
+        )}
+
+        {/* Shared settings */}
+        <div className="space-y-3 shrink-0 border-t pt-3">
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={awaitingLayout}
+              onChange={(e) => setAwaitingLayout(e.target.checked)}
+              className="rounded"
+            />
+            <span>Chờ file layout (tạo lệnh ở trạng thái &quot;awaiting_layout&quot;)</span>
+          </label>
+          {awaitingLayout && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">Ghi chú cho Designer</Label>
+              <Input
+                placeholder="VD: Ưu tiên gấp, cần file trong ngày..."
+                value={designerNote}
+                onChange={(e) => setDesignerNote(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="shrink-0">
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            Huỷ
+          </Button>
+          <Button onClick={handleSubmit} disabled={saving || rows.length === 0}>
             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Tạo yêu cầu
+            Tạo {rows.length} lệnh
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -377,20 +489,31 @@ function CreateProductionDialog({ onCreated }: { onCreated: () => void }) {
   );
 }
 
-// ─── List Item ──────────────────────────────────────────────────────
+// ─── List Item (enhanced with layout info) ──────────────────────────
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function RequestListItem({ req, isSelected, onSelect }: { req: any; isSelected: boolean; onSelect: () => void }) {
   const stepsTotal = req.steps.length;
   const stepsFinished = req.steps.filter((s: { finishedAt: string | null }) => s.finishedAt).length;
   const progressPercent = stepsTotal > 0 ? Math.round((stepsFinished / stepsTotal) * 100) : 0;
+  const isAwaitingLayout = req.status === "awaiting_layout";
+
+  // Parse layout snapshot for material/dimensions
+  let layoutInfo: { materialCode?: string; materialWidth?: number; materialLength?: number; code?: string } | null = null;
+  if (req.layoutSnapshot) {
+    try {
+      const parsed = JSON.parse(req.layoutSnapshot);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        layoutInfo = parsed[0];
+      }
+    } catch { /* ignore */ }
+  }
 
   return (
     <button
       onClick={onSelect}
-      className={`w-full text-left px-4 py-3 flex flex-col gap-1.5 border-b transition-colors ${isSelected
-          ? "bg-accent"
-          : "hover:bg-muted/50"
-        }`}
+      className={`w-full text-left px-4 py-3 flex flex-col gap-1.5 border-b transition-colors ${
+        isSelected ? "bg-accent" : "hover:bg-muted/50"
+      } ${isAwaitingLayout ? "opacity-60 border-dashed" : ""}`}
     >
       <div className="flex items-center justify-between w-full gap-2">
         <div className="flex items-center gap-2 min-w-0">
@@ -401,11 +524,27 @@ function RequestListItem({ req, isSelected, onSelect }: { req: any; isSelected: 
           {req.priority === "priority" && (
             <span className="inline-block w-2 h-2 rounded-full bg-amber-500 shrink-0" />
           )}
+          {isAwaitingLayout && (
+            <Badge className="bg-amber-500 text-white text-[9px] py-0 h-4 shrink-0">⏳ Chờ file</Badge>
+          )}
         </div>
         <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">
           {format(new Date(req.createdAt), "dd/MM/yy")}
         </span>
       </div>
+      {/* Layout material & dimensions — visible at a glance */}
+      {layoutInfo && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge variant="outline" className="text-[9px] py-0 font-normal bg-amber-50 dark:bg-amber-950/20 border-amber-200">
+            {layoutInfo.materialCode}
+          </Badge>
+          {layoutInfo.materialWidth && layoutInfo.materialLength && (
+            <span className="text-[10px] font-bold text-[--color-ink] dark:text-foreground">
+              {layoutInfo.materialWidth} × {layoutInfo.materialLength} mm
+            </span>
+          )}
+        </div>
+      )}
       {req.idea.title && (
         <p className="text-xs text-muted-foreground line-clamp-1">{req.idea.title}</p>
       )}
@@ -421,7 +560,7 @@ function RequestListItem({ req, isSelected, onSelect }: { req: any; isSelected: 
         )}
       </div>
       {/* Mini progress bar */}
-      {stepsTotal > 0 && progressPercent > 0 && progressPercent < 100 && (
+      {!isAwaitingLayout && stepsTotal > 0 && progressPercent > 0 && progressPercent < 100 && (
         <div className="w-full bg-muted rounded-full h-1 mt-0.5">
           <div
             className="bg-blue-500 h-1 rounded-full transition-all"
@@ -438,7 +577,7 @@ function RequestListItem({ req, isSelected, onSelect }: { req: any; isSelected: 
   );
 }
 
-// ─── Detail Pane ────────────────────────────────────────────────────
+// ─── Detail Pane (enhanced with layout info) ────────────────────────
 function DetailPane({
   req,
   onBack,
@@ -453,6 +592,11 @@ function DetailPane({
   onStepAction: (stepId: string, action: string, workerName?: string) => void;
   onComplete: (requestId: string) => void;
 }) {
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportReason, setReportReason] = useState("");
+  const [reportNote, setReportNote] = useState("");
+  const [reportSaving, setReportSaving] = useState(false);
+
   if (!req) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-8">
@@ -470,6 +614,41 @@ function DetailPane({
   const thumbUrl = convertToDirectImageUrl(req.idea.mainImageUrl);
   const allStepsFinished = req.steps.every((s: { finishedAt: string | null }) => s.finishedAt);
   const someStarted = req.steps.some((s: { startedAt: string | null }) => s.startedAt);
+  const isAwaitingLayout = req.status === "awaiting_layout";
+
+  // Parse layout snapshot
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let layoutPlans: any[] = [];
+  if (req.layoutSnapshot) {
+    try { layoutPlans = JSON.parse(req.layoutSnapshot); } catch { /* ignore */ }
+  }
+  const layoutPlan = layoutPlans.length > 0 ? layoutPlans[0] : null;
+
+  const handleReportError = async () => {
+    if (!reportReason) { toast.error("Vui lòng chọn lý do"); return; }
+    setReportSaving(true);
+    try {
+      const { data } = await apiFetch("/api/production-layouts/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "layout_revision_requested",
+          layoutId: layoutPlan?.layoutId,
+          ideaIds: [req.ideaId],
+          reason: reportReason,
+          note: reportNote || undefined,
+        }),
+        successMessage: "Đã báo lỗi file! Designer sẽ được thông báo.",
+      });
+      if (data) {
+        setReportOpen(false);
+        setReportReason("");
+        setReportNote("");
+      }
+    } finally {
+      setReportSaving(false);
+    }
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -519,6 +698,9 @@ function DetailPane({
                 {typeBadge(req.type)}
                 {priorityBadge(req.priority)}
                 <Badge variant="outline" className="text-[10px]">{req.idea.fulfillmentType}</Badge>
+                {isAwaitingLayout && (
+                  <Badge className="bg-amber-500 text-white text-[10px]">⏳ Đang chờ File thiết kế</Badge>
+                )}
                 {req.completedAt && (
                   <Badge className="bg-green-600 hover:bg-green-700 text-white text-[10px]">
                     ✓ Hoàn thành {format(new Date(req.completedAt), "dd/MM/yy")}
@@ -527,6 +709,72 @@ function DetailPane({
               </div>
             </div>
           </div>
+
+          {/* ─── Layout Info Card (NEW) ─── */}
+          {layoutPlan && (
+            <div className="bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <Layers className="h-4 w-4 text-blue-600" />
+                <span className="text-sm font-semibold">File sản xuất: {layoutPlan.code}</span>
+                {layoutPlan.isVerified !== undefined && (
+                  <ShieldCheck className={`h-3.5 w-3.5 ${layoutPlan.isVerified ? "text-green-600" : "text-muted-foreground"}`} />
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <span className="text-[11px] text-muted-foreground">Vật liệu</span>
+                  <p className="font-bold text-[--color-craft] dark:text-orange-400">{layoutPlan.materialCode}</p>
+                </div>
+                <div>
+                  <span className="text-[11px] text-muted-foreground">Kích thước phôi</span>
+                  <p className="text-lg font-bold font-mono">{layoutPlan.materialWidth} × {layoutPlan.materialLength} <span className="text-xs font-normal text-muted-foreground">mm</span></p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                {layoutPlan.dxfFileUrl && (
+                  <a href={layoutPlan.dxfFileUrl} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline bg-white dark:bg-blue-950/50 px-2 py-1 rounded border border-blue-200">
+                    <Download className="h-3 w-3" /> Tải DXF
+                  </a>
+                )}
+                {layoutPlan.pdfFileUrl && (
+                  <a href={layoutPlan.pdfFileUrl} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline bg-white dark:bg-blue-950/50 px-2 py-1 rounded border border-blue-200">
+                    <Download className="h-3 w-3" /> Tải PDF
+                  </a>
+                )}
+                <Badge variant="outline" className="text-[10px]">
+                  {layoutPlan.runCount} lần chạy
+                </Badge>
+              </div>
+              {/* Report error button */}
+              {!isAwaitingLayout && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs text-red-600 border-red-200 hover:bg-red-50"
+                  onClick={() => setReportOpen(true)}
+                >
+                  <AlertTriangle className="h-3 w-3 mr-1" /> Báo lỗi file
+                </Button>
+              )}
+            </div>
+          )}
+
+          {/* Awaiting layout banner */}
+          {isAwaitingLayout && (
+            <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 border-dashed rounded-lg px-4 py-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600" />
+                <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                  ⏳ Đang chờ File thiết kế
+                </span>
+              </div>
+              <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                Lệnh này đã được gửi cho bộ phận Thiết kế. Khi có file layout, lệnh sẽ tự động kích hoạt.
+              </p>
+            </div>
+          )}
 
           {/* Info Grid */}
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -566,11 +814,13 @@ function DetailPane({
 
           <Separator />
 
-          {/* Step Progress */}
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold">Tiến độ sản xuất</h3>
-            <StepProgress steps={req.steps} onAction={onStepAction} />
-          </div>
+          {/* Step Progress (hidden when awaiting layout) */}
+          {!isAwaitingLayout && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold">Tiến độ sản xuất</h3>
+              <StepProgress steps={req.steps} onAction={onStepAction} />
+            </div>
+          )}
 
           {/* Complete Button */}
           {allStepsFinished && !req.completedAt && someStarted && (
@@ -602,6 +852,55 @@ function DetailPane({
           )}
         </div>
       </ScrollArea>
+
+      {/* Report Error Dialog */}
+      <Dialog open={reportOpen} onOpenChange={setReportOpen}>
+        <DialogContent className="sm:max-w-[450px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-500" />
+              Báo lỗi file sản xuất
+            </DialogTitle>
+            <DialogDescription>
+              File đang dùng gặp vấn đề? Báo lỗi để Designer sửa lại.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Lý do</Label>
+              <Select value={reportReason} onValueChange={setReportReason}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Chọn lý do..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="file_corrupted">File hỏng / không mở được</SelectItem>
+                  <SelectItem value="high_waste">Hao hụt thực tế quá cao</SelectItem>
+                  <SelectItem value="wrong_thickness">Sai độ dày vật liệu</SelectItem>
+                  <SelectItem value="burn_marks">Đường nét quá sát, gây cháy cạnh</SelectItem>
+                  <SelectItem value="wrong_dimensions">Sai kích thước phôi</SelectItem>
+                  <SelectItem value="other">Khác</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Ghi chú thêm</Label>
+              <Textarea
+                value={reportNote}
+                onChange={(e) => setReportNote(e.target.value)}
+                rows={2}
+                placeholder="Mô tả chi tiết vấn đề..."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReportOpen(false)}>Huỷ</Button>
+            <Button onClick={handleReportError} disabled={reportSaving} className="bg-red-600 hover:bg-red-700">
+              {reportSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Gửi báo lỗi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
