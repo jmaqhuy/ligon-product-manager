@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { withRateLimit } from "@/lib/rate-limit-helper";
 
 // GET /api/ideas/draft - Lấy bản nháp của user hiện tại
 export async function GET() {
@@ -32,6 +33,9 @@ export async function POST(req: Request) {
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const { blocked } = withRateLimit(session.user.id, "POST", "/api/ideas/draft");
+    if (blocked) return blocked;
 
     const body = await req.json();
 

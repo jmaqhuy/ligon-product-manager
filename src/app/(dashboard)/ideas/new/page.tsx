@@ -31,6 +31,7 @@ import { toast } from "sonner";
 import { apiFetch } from "@/lib/api-client";
 import { ImagePreviewDialog } from "@/components/image-preview-dialog";
 import { convertToDirectImageUrl } from "@/lib/google-drive";
+import type { IdeaFormValues } from "@/types/idea-form";
 
 // Types
 interface TopicOption { id: string; name: string; }
@@ -223,8 +224,9 @@ export default function CreateIdeaPage() {
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [showDraftBanner, setShowDraftBanner] = useState(false);
-  const latestDataRef = useRef<any>(null);
+  const latestDataRef = useRef<Partial<IdeaFormValues> | null>(null);
   const saveTimeout = useRef<NodeJS.Timeout | null>(null);
+  const skipDraftRef = useRef(false);
 
   const getHighlight = (val: any) => {
     const baseTrans = "transition-shadow duration-1000 ease-out";
@@ -233,9 +235,23 @@ export default function CreateIdeaPage() {
     return hasValue ? `${baseTrans} ring-2 ring-amber-500 ring-offset-1` : baseTrans;
   };
 
+  // Fields preserved across idea creations (không reset sau khi tạo)
+  const PRESERVED_FIELDS = new Set([
+    "autoGenerateMsku", "topicId", "aiModelId", "ideaSource", "partnerId"
+  ]);
+
+  const isFormEffectivelyEmpty = (values: Record<string, unknown>) => {
+    return Object.entries(values).every(([key, val]) => {
+      if (PRESERVED_FIELDS.has(key)) return true;
+      if (val === undefined || val === null || val === "") return true;
+      if (Array.isArray(val) && val.every((v: any) => !v)) return true;
+      return false;
+    });
+  };
+
   const isReady = Object.keys(rules).length > 0;
 
-  const form = useForm({
+  const form = useForm<IdeaFormValues>({
     resolver: isReady ? (zodResolver(getFormSchema(isManagement, rules)) as any) : undefined,
     defaultValues: {
       autoGenerateMsku: true,
@@ -336,9 +352,12 @@ export default function CreateIdeaPage() {
   useEffect(() => {
     const subscription = form.watch((value, { type }) => {
       if (!type) return;
+      if (skipDraftRef.current) {
+        skipDraftRef.current = false;
+        return;
+      }
 
-      const isBasicallyEmpty = !value.topicId && !value.aiModelId && !value.title && !value.description && !value.tags && !value.slugs && !value.itemHighlights && !value.width && !value.height && !value.thickness && !value.material && (!value.sourceLinks || value.sourceLinks.join("") === "") && (!value.bulletPoints || value.bulletPoints.join("") === "") && !value.prompt && !value.mainImageUrl && !value.designFileUrl && !value.partnerId && !value.manualMsku;
-      if (isBasicallyEmpty) return;
+      if (isFormEffectivelyEmpty(value)) return;
 
       latestDataRef.current = value;
       setShowDraftBanner(false);
@@ -363,13 +382,17 @@ export default function CreateIdeaPage() {
       subscription.unsubscribe();
       if (saveTimeout.current) clearTimeout(saveTimeout.current);
     };
-  }, [form.watch]);
+  }, [form]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
       if (form.formState.isDirty && latestDataRef.current) {
-        const blob = new Blob([JSON.stringify(latestDataRef.current)], { type: 'application/json' });
-        navigator.sendBeacon('/api/ideas/draft', blob);
+        fetch('/api/ideas/draft', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(latestDataRef.current),
+          keepalive: true,
+        });
       }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -389,55 +412,7 @@ export default function CreateIdeaPage() {
   }, [form]);
 
 
-  const onSubmit = async (values: any) => {
-    let hasError = false;
-
-    // Manual Validations
-    if (!values.autoGenerateMsku && (!values.manualMsku || values.manualMsku.trim() === "")) {
-      form.setError("manualMsku", { message: "Vui lòng nhập MSKU" });
-      hasError = true;
-    }
-    if (values.ideaSource === "partner") {
-      if (!values.partnerId) {
-        form.setError("partnerId", { message: "Vui lòng chọn đối tác" });
-        hasError = true;
-      }
-      if (!values.mainImageUrl || values.mainImageUrl.trim() === "") {
-        form.setError("mainImageUrl", { message: "Vui lòng nhập link ảnh" });
-        hasError = true;
-      }
-      if (!values.designFileUrl || values.designFileUrl.trim() === "") {
-        form.setError("designFileUrl", { message: "Đối tác bắt buộc phải có file thiết kế" });
-        hasError = true;
-      }
-    } else {
-      // Nội bộ
-      if (!values.mainImageUrl || values.mainImageUrl.trim() === "") {
-        form.setError("mainImageUrl", { message: "Vui lòng nhập link ảnh" });
-        hasError = true;
-      }
-      if (!isManagement && (!values.prompt || values.prompt.trim() === "")) {
-        form.setError("prompt", { message: "Vui lòng nhập prompt" });
-        hasError = true;
-      }
-    }
-
-    // Dimensions are mandatory for all sources
-    if (!values.width || values.width.trim() === "" || isNaN(parseFloat(values.width))) {
-      form.setError("width", { message: "Bắt buộc" });
-      hasError = true;
-    }
-    if (!values.height || values.height.trim() === "" || isNaN(parseFloat(values.height))) {
-      form.setError("height", { message: "Bắt buộc" });
-      hasError = true;
-    }
-    if (!values.thickness || values.thickness.trim() === "" || isNaN(parseFloat(values.thickness))) {
-      form.setError("thickness", { message: "Bắt buộc" });
-      hasError = true;
-    }
-
-    if (hasError) return;
-
+  const onSubmit = async (values: IdeaFormValues) => {
     // Translation Layer: UI Units -> DB Units
     let dbWidthCm: number | undefined = undefined;
     let dbHeightCm: number | undefined = undefined;
@@ -469,6 +444,7 @@ export default function CreateIdeaPage() {
           sourceLinks: values.sourceLinks.filter((l: string) => l.trim()),
           title: values.title || undefined,
           description: values.description || undefined,
+          itemHighlights: values.itemHighlights || undefined,
           bulletPoints: values.bulletPoints.filter((b: string) => b.trim()),
           tags: values.tags || undefined,
           slugs: values.slugs || undefined,
@@ -483,13 +459,54 @@ export default function CreateIdeaPage() {
 
       if (data) {
         await apiFetch("/api/ideas/draft", { method: "DELETE" });
-        form.reset();
+        const createdMsku = data.msku;
+        const createdId = data.id;
+
+        // Reset form: giữ lại Cài đặt chung, xóa nội dung
+        skipDraftRef.current = true;
+        form.reset({
+          autoGenerateMsku: form.getValues("autoGenerateMsku"),
+          manualMsku: "",
+          topicId: form.getValues("topicId"),
+          aiModelId: form.getValues("aiModelId"),
+          ideaSource: form.getValues("ideaSource"),
+          partnerId: form.getValues("partnerId"),
+          mainImageUrl: "",
+          designFileUrl: "",
+          prompt: "",
+          sourceLinks: [""],
+          title: "",
+          description: "",
+          bulletPoints: ["", "", "", "", ""],
+          tags: "",
+          slugs: "",
+          width: "",
+          height: "",
+          thickness: "",
+          material: "",
+          itemHighlights: "",
+        });
+
         setShowDraftBanner(false);
         setLastSaved(null);
+
+        toast.success(`Đã tạo ${createdMsku}!`, {
+          action: {
+            label: "Xem chi tiết",
+            onClick: () => router.push(`/ideas/${createdId}`),
+          },
+          duration: 5000,
+        });
+
         import("canvas-confetti").then((confetti) => {
           confetti.default({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
         });
-        setTimeout(() => router.push("/ideas"), 2000);
+
+        // Focus vào field ảnh để tiếp tục nhập idea mới
+        setTimeout(() => {
+          const imageInput = document.querySelector('input[name="mainImageUrl"]') as HTMLInputElement;
+          imageInput?.focus();
+        }, 100);
       }
     } finally {
       setLoading(false);
@@ -497,7 +514,10 @@ export default function CreateIdeaPage() {
   };
 
   const onError = (errors: any) => {
-    toast.error("Vui lòng điền đầy đủ các thông tin bắt buộc", { position: "top-center" });
+    const firstErrorKey = Object.keys(errors)[0];
+    const firstError = errors[firstErrorKey];
+    const message = firstError?.message || "Vui lòng kiểm tra lại thông tin";
+    toast.error(message, { position: "top-center" });
   };
 
 

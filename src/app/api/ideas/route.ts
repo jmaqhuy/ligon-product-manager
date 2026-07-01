@@ -167,6 +167,10 @@ export async function POST(req: Request) {
       bulletPoints,
       tags,
       slugs,
+      title,
+      description,
+      designFileUrl,
+      itemHighlights,
     } = body;
 
     // Determine source: explicit > role-based > default
@@ -181,10 +185,26 @@ export async function POST(req: Request) {
       );
     }
 
+    // Partner ideas: designFileUrl is required
+    if (ideaSource === "partner" && !designFileUrl) {
+      return NextResponse.json(
+        { error: "Đối tác bắt buộc phải có file thiết kế" },
+        { status: 400 }
+      );
+    }
+
     // Validate required fields
     if (!topicId || !aiModelId || !mainImageUrl) {
       return NextResponse.json(
         { error: "Thiếu thông tin bắt buộc (chủ đề, AI model, ảnh)" },
+        { status: 400 }
+      );
+    }
+
+    // Validate dimensions are required
+    if (!widthCm || !heightCm || !thicknessMm) {
+      return NextResponse.json(
+        { error: "Vui lòng nhập đầy đủ kích thước (rộng, cao, dày)" },
         { status: 400 }
       );
     }
@@ -218,47 +238,68 @@ export async function POST(req: Request) {
     // Partner ideas skip directly to approved (no review needed)
     const finalStatus = ideaSource === "partner" ? "approved" : initialStatus;
 
-    const idea = await db.idea.create({
-      data: {
-        msku,
-        autoGenerateMsku: autoGenerateMsku !== false,
-        createdBy: { connect: { id: session.user.id } },
-        topic: { connect: { id: topicId } },
-        aiModel: { connect: { id: aiModelId } },
-        prompt,
-        sourceLinks: JSON.stringify(sourceLinks || []),
-        mainImageUrl,
-        status: finalStatus,
-        source: ideaSource,
-        ...(ideaSource === "partner" && partnerId ? { partner: { connect: { id: partnerId } } } : {}),
-        partnerLabel: partnerLabel || null,
-        widthCm: widthCm || null,
-        heightCm: heightCm || null,
-        thicknessMm: thicknessMm || null,
-        material: material || null,
-        amazonListing: {
-          create: {
-            sku: msku,
-            bulletPoints: bulletPoints ? JSON.stringify(bulletPoints) : JSON.stringify([]),
-            tags: tags || null,
-            slugs: slugs || null,
-            listingStatus: "not_ready",
+    // Wrap create in retry loop for rare MSKU race condition
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let idea: any;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        idea = await db.idea.create({
+          data: {
+            msku,
+            autoGenerateMsku: autoGenerateMsku !== false,
+            createdBy: { connect: { id: session.user.id } },
+            topic: { connect: { id: topicId } },
+            aiModel: { connect: { id: aiModelId } },
+            prompt,
+            sourceLinks: JSON.stringify(sourceLinks || []),
+            mainImageUrl,
+            status: finalStatus,
+            source: ideaSource,
+            ...(ideaSource === "partner" && partnerId ? { partner: { connect: { id: partnerId } } } : {}),
+            partnerLabel: partnerLabel || null,
+            widthCm: widthCm || null,
+            heightCm: heightCm || null,
+            thicknessMm: thicknessMm || null,
+            material: material || null,
+            designFileUrl: designFileUrl || null,
+            amazonListing: {
+              create: {
+                sku: msku,
+                itemName: title || null,
+                description: description || null,
+                itemHighlights: itemHighlights || null,
+                bulletPoints: bulletPoints ? JSON.stringify(bulletPoints) : JSON.stringify([]),
+                tags: tags || null,
+                slugs: slugs || null,
+                listingStatus: "not_ready",
+              }
+            },
+            etsyListing: {
+              create: {
+                title: title || null,
+                description: description || null,
+                listingStatus: "not_ready",
+              }
+            }
+          },
+          include: {
+            createdBy: { select: { fullName: true } },
+            topic: { select: { name: true } },
+            partner: { select: { name: true } },
+            amazonListing: true,
+            etsyListing: true,
           }
-        },
-        etsyListing: {
-          create: {
-            listingStatus: "not_ready",
-          }
+        });
+        break; // success — exit retry loop
+      } catch (err: any) {
+        if (err?.code === 'P2002' && attempt === 0 && autoGenerateMsku !== false) {
+          // MSKU unique constraint — regenerate and retry once
+          msku = await generateMsku(session.user.nameAbbreviation);
+          continue;
         }
-      },
-      include: {
-        createdBy: { select: { fullName: true } },
-        topic: { select: { name: true } },
-        partner: { select: { name: true } },
-        amazonListing: true,
-        etsyListing: true,
+        throw err;
       }
-    });
+    }
 
     const ideaRow = {
       id: idea.id,

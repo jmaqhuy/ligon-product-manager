@@ -178,7 +178,17 @@ export async function PATCH(
       });
     }
 
-    // Dimensions & material
+    // Dimensions & material — validate range first
+    if (body.widthCm !== undefined && (typeof body.widthCm !== "number" || body.widthCm <= 0 || body.widthCm > 1000)) {
+      return NextResponse.json({ error: "Chiều rộng không hợp lệ (0-1000 cm)" }, { status: 400 });
+    }
+    if (body.heightCm !== undefined && (typeof body.heightCm !== "number" || body.heightCm <= 0 || body.heightCm > 1000)) {
+      return NextResponse.json({ error: "Chiều cao không hợp lệ (0-1000 cm)" }, { status: 400 });
+    }
+    if (body.thicknessMm !== undefined && (typeof body.thicknessMm !== "number" || body.thicknessMm <= 0 || body.thicknessMm > 100)) {
+      return NextResponse.json({ error: "Độ dày không hợp lệ (0-100 mm)" }, { status: 400 });
+    }
+
     const addAudit = (field: string, oldV: any, newV: any) => {
       const oldStr = oldV != null ? String(oldV) : null;
       const newStr = newV != null ? String(newV) : null;

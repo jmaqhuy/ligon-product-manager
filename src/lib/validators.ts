@@ -28,24 +28,41 @@ export const updateProfileSchema = z.object({
 export const createIdeaSchema = z.object({
   autoGenerateMsku: z.boolean().optional().default(true),
   manualMsku: z.string().max(30).optional(),
-  topicId: z.string().uuid("Chủ đề không hợp lệ"),
-  aiModelId: z.string().uuid("AI Model không hợp lệ"),
-  prompt: z.string().min(1, "Prompt không được để trống"),
-  sourceLinks: z.array(z.string().url()).min(1, "Cần ít nhất 1 link nguồn").max(5, "Tối đa 5 link nguồn"),
+  topicId: z.string().min(1, "Chủ đề không được để trống"),
+  aiModelId: z.string().min(1, "AI Model không được để trống"),
+  prompt: z.string().optional(),
+  sourceLinks: z.array(z.string()).max(5).optional().default([]),
   mainImageUrl: z.string().min(1, "Ảnh chính không được để trống"),
-  fulfillmentType: z.enum(["FBA", "FBM"]).optional().default("FBM"),
+  designFileUrl: z.string().optional(),
   title: z.string().max(75).optional(),
   description: z.string().optional(),
+  itemHighlights: z.string().optional(),
   source: z.enum(["employee", "boss", "partner"]).optional(),
-  partnerId: z.string().uuid().optional(),
+  partnerId: z.string().optional(),
   partnerLabel: z.string().optional(),
-  widthCm: z.number().positive().optional(),
-  heightCm: z.number().positive().optional(),
-  thicknessMm: z.number().positive().optional(),
+  widthCm: z.number().positive("Kích thước phải là số dương").optional(),
+  heightCm: z.number().positive("Kích thước phải là số dương").optional(),
+  thicknessMm: z.number().positive("Kích thước phải là số dương").optional(),
   material: z.string().optional(),
-  bulletPoints: z.array(z.string()).max(5).optional(),
+  bulletPoints: z.array(z.string()).max(5).optional().default([]),
   tags: z.string().max(500).optional(),
-  slugs: z.array(z.string()).max(12).optional(),
+  slugs: z.string().optional(),
+}).superRefine((data, ctx) => {
+  if (data.source === "partner" && !data.partnerId) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["partnerId"], message: "Vui lòng chọn đối tác" });
+  }
+  if (data.source === "partner" && !data.designFileUrl) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["designFileUrl"], message: "Đối tác bắt buộc phải có file thiết kế" });
+  }
+  if (!data.widthCm) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["widthCm"], message: "Bắt buộc nhập kích thước" });
+  }
+  if (!data.heightCm) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["heightCm"], message: "Bắt buộc nhập kích thước" });
+  }
+  if (!data.thicknessMm) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["thicknessMm"], message: "Bắt buộc nhập kích thước" });
+  }
 });
 
 export const updateIdeaSchema = z.object({
