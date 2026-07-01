@@ -140,19 +140,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             select: { id: true, status: true, role: true, fullName: true, nameAbbreviation: true, avatarUrl: true, notificationSettings: true },
           });
           if (!existingUser || existingUser.status !== "active") {
-            // User no longer exists or is inactive — invalidate token completely
-            // Must clear ALL identifying fields including NextAuth's built-in sub/name/email
-            return {
-              sub: undefined,
-              id: undefined,
-              role: undefined,
-              fullName: undefined,
-              nameAbbreviation: undefined,
-              avatarUrl: undefined,
-              notificationSettings: undefined,
-              name: undefined,
-              email: undefined,
-            } as unknown as typeof token;
+            // User no longer exists or is inactive — return an error flag to avoid server log pollution
+            return { error: "UserNotFound" } as any;
           }
           // Keep token in sync with DB
           token.role = existingUser.role as Role;
@@ -166,16 +155,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       }
       return token;
     },
-    async session({ session, token }) {
-      // Only populate user data if token has a valid user ID
-      if (token?.id) {
-        session.user.id = token.id;
-        session.user.role = token.role;
-        session.user.fullName = token.fullName;
-        session.user.nameAbbreviation = token.nameAbbreviation;
-        session.user.avatarUrl = token.avatarUrl;
-        session.user.notificationSettings = token.notificationSettings;
+    async session({ session, token }: any) {
+      if (token?.error === "UserNotFound" || !token?.id) {
+        // Pass the error flag to the client session
+        return { error: "UserNotFound" } as any;
       }
+      
+      session.user.id = token.id;
+      session.user.role = token.role;
+      session.user.fullName = token.fullName;
+      session.user.nameAbbreviation = token.nameAbbreviation;
+      session.user.avatarUrl = token.avatarUrl;
+      session.user.notificationSettings = token.notificationSettings;
       return session;
     },
   },

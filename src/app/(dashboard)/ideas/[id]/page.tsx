@@ -19,8 +19,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetTrigger } from "@/components/ui/sheet";
 import { AuditLogViewer } from "@/components/audit-log-viewer";
-import { AmazonListingTab } from "@/components/ideas/amazon-listing-tab";
-import { EtsyListingTab } from "@/components/ideas/etsy-listing-tab";
+import { AmazonListingTab } from "../components/amazon-listing-tab";
+import { EtsyListingTab } from "../components/etsy-listing-tab";
 import { EditIdeaSheet } from "../components/edit-idea-sheet";
 
 import { ImagePreviewDialog } from "@/components/image-preview-dialog";

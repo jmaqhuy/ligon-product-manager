@@ -58,7 +58,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       if (session?.user) fetchUnread();
     }, 15000);
     return () => clearInterval(interval);
-  }, [session]);
+  }, [session?.user?.id]);
 
   useEffect(() => {
     const socketInstance = io(); // Connects to the same host/port automatically
@@ -130,7 +130,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     return () => {
       socketInstance.disconnect();
     };
-  }, [session]);
+  }, [session?.user?.id]);
 
   // Update current path when route changes
   useEffect(() => {

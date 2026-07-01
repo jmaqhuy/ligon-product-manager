@@ -6,6 +6,7 @@ import { AppSidebar } from "@/components/layout/app-sidebar";
 import { TopBar } from "@/components/layout/top-bar";
 import { ConfettiCelebration } from "@/components/confetti-celebration";
 import { NuqsAdapter } from 'nuqs/adapters/next/app';
+import { AuthGuard } from "@/components/auth-guard";
 
 export default async function DashboardLayout({
   children,
@@ -35,16 +36,18 @@ export default async function DashboardLayout({
 
   return (
     <NuqsAdapter>
-      <SidebarProvider defaultOpen={defaultOpen}>
-        <AppSidebar />
-        <SidebarInset>
-          <TopBar />
-          <main className="flex-1 px-4 py-3 md:px-6 md:py-4">
-            {children}
-          </main>
-          <ConfettiCelebration />
-        </SidebarInset>
-      </SidebarProvider>
+      <AuthGuard>
+        <SidebarProvider defaultOpen={defaultOpen}>
+          <AppSidebar />
+          <SidebarInset>
+            <TopBar />
+            <main className="flex-1 px-4 py-3 md:px-6 md:py-4">
+              {children}
+            </main>
+            <ConfettiCelebration />
+          </SidebarInset>
+        </SidebarProvider>
+      </AuthGuard>
     </NuqsAdapter>
   );
 }

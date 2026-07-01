@@ -37,6 +37,7 @@ model User {
   auditLogs       AuditLog[]
   ordersDesigned  Order[]          @relation("OrderDesigner")
   ordersProduced  Order[]          @relation("OrderProducer")
+  ideaDraft       IdeaDraft?
 
   @@map("users")
 }
@@ -464,4 +465,18 @@ model SystemSetting {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@map("system_settings")
+}
+
+// ============================
+// Module 13: Drafts
+// ============================
+model IdeaDraft {
+  id        String   @id @default(cuid())
+  userId    String   @unique @map("user_id")
+  data      String   // JSON string
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("idea_drafts")
 }

@@ -182,9 +182,17 @@ export async function POST(req: Request) {
     }
 
     // Validate required fields
-    if (!topicId || !aiModelId || !prompt || !mainImageUrl) {
+    if (!topicId || !aiModelId || !mainImageUrl) {
       return NextResponse.json(
-        { error: "Thiếu thông tin bắt buộc (chủ đề, AI model, prompt, ảnh)" },
+        { error: "Thiếu thông tin bắt buộc (chủ đề, AI model, ảnh)" },
+        { status: 400 }
+      );
+    }
+
+    // Require prompt only for employees (unless it's a partner idea)
+    if (role === "employee" && ideaSource !== "partner" && !prompt) {
+      return NextResponse.json(
+        { error: "Prompt là bắt buộc đối với nhân viên" },
         { status: 400 }
       );
     }

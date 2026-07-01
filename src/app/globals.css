@@ -54,10 +54,12 @@
       box-shadow: 0 0 0 0 var(--heartbeat-color, var(--destructive));
       transform: scale(1);
     }
+
     50% {
       box-shadow: 0 0 0 6px transparent;
       transform: scale(1.03);
     }
+
     100% {
       box-shadow: 0 0 0 0 transparent;
       transform: scale(1);
@@ -138,9 +140,11 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
   }
+
   html {
     @apply font-sans;
   }
@@ -167,6 +171,7 @@
 
 /* Reduced motion preference */
 @media (prefers-reduced-motion: reduce) {
+
   *,
   *::before,
   *::after {
