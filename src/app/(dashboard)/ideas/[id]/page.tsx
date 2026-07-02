@@ -180,6 +180,7 @@ export default function IdeaDetailPage() {
   const [reviewComment, setReviewComment] = useState("");
   const [actionType, setActionType] = useState<"approve" | "reject" | "revise" | null>(null);
   const [photoRevisionInput, setPhotoRevisionInput] = useState("");
+  const [fileUrlInput, setFileUrlInput] = useState("");
   const [labelPrintQty, setLabelPrintQty] = useState(1);
   const [autoNext, setAutoNext] = useState(false);
 
@@ -298,6 +299,21 @@ export default function IdeaDetailPage() {
     fetch("/api/partners").then(r => r.json()).then(setPartners).catch(() => { });
   }, [fetchIdea]);
 
+  useEffect(() => {
+    setFileUrlInput("");
+  }, [idea?.id, idea?.fileStatus, idea?.fileAssigneeId]);
+
+  // Smart Polling: failsafe for WebSocket — poll every 3.5s only while AI is generating
+  useEffect(() => {
+    if (!idea?.aiGeneratingStatus) return;
+
+    const interval = setInterval(() => {
+      fetchIdea();
+    }, 3500);
+
+    return () => clearInterval(interval);
+  }, [idea?.aiGeneratingStatus, fetchIdea]);
+
   // ─── Actions ──────────────────────────────────────────────────────
   const handleReviewAction = async (overrideAction?: "approve" | "reject" | "revise", requestPhotos?: boolean, fulfillmentType?: "FBM" | "FBA") => {
     const action = overrideAction || actionType;
@@ -379,6 +395,8 @@ export default function IdeaDetailPage() {
         });
         toast.success("Đã cập nhật!");
         fetchIdea();
+        queryClient.invalidateQueries({ queryKey: ["ideas", id] });
+        router.refresh();
       }
       else { const data = await res.json(); toast.error(data.error || "Lỗi cập nhật"); }
     } catch { toast.error("Lỗi hệ thống"); }
@@ -860,14 +878,17 @@ export default function IdeaDetailPage() {
                   </div>
                 )}
                 {idea.designFileUrl && (
-                  <div className="flex items-center justify-between text-[11px] px-1">
+                  <div className="flex items-center justify-between text-[11px] px-1 gap-1">
                     <span className="text-muted-foreground font-medium">Link file:</span>
-                    <a href={idea.designFileUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-1 bg-blue-50 px-2 py-1 rounded">
-                      <ExternalLink className="h-3 w-3" /> Xem file thiết kế
-                    </a>
+                    <div className="flex items-center gap-1">
+                      <a href={idea.designFileUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-1 bg-blue-50 px-2 py-1 rounded">
+                        <ExternalLink className="h-3 w-3" /> Xem file thiết kế
+                      </a>
+                      <CopyButton text={idea.designFileUrl} className="h-6 w-6 shrink-0" />
+                    </div>
                   </div>
                 )}
-                {idea.fileRevisionNote && (
+                {idea.fileRevisionNote && idea.fileStatus !== "approved" && (
                   <div className="text-[11px] px-1.5 py-1.5 mt-1 bg-amber-50 text-amber-800 rounded border border-amber-200">
                     <span className="font-semibold block mb-0.5">Ghi chú sửa:</span>
                     <span className="block whitespace-pre-wrap">{idea.fileRevisionNote}</span>
@@ -876,7 +897,7 @@ export default function IdeaDetailPage() {
 
                 {/* Workflow Actions for Design File */}
                 <div className="pt-2 space-y-1.5 border-t mt-2">
-                  {(role === "manager" || role === "boss" || idea.createdById === session?.user?.id) && (!idea.fileStatus || idea.fileStatus === "not_requested") && (
+                  {(role === "manager" || role === "boss") && idea.status === "approved" && (!idea.fileStatus || idea.fileStatus === "not_requested") && (
                     <Button size="sm" className="w-full h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white" onClick={() => handleUpdateIdea({ fileStatus: "awaiting_file" })} disabled={saving}>
                       Yêu cầu làm file thiết kế
                     </Button>
@@ -893,15 +914,16 @@ export default function IdeaDetailPage() {
                           placeholder="Nhập link file (Google Drive, Dropbox...)"
                           className="h-7 text-xs"
                           id="upload-file-url"
-                          onBlur={(e) => {
-                            if (e.target.value) handleUpdateIdea({ designFileUrl: e.target.value });
-                          }}
-                          defaultValue={idea.designFileUrl || ""}
+                          value={fileUrlInput}
+                          onChange={(e) => setFileUrlInput(e.target.value)}
                         />
                         <Button size="sm" className="w-full h-7 text-xs bg-amber-600 hover:bg-amber-700 text-white" onClick={() => {
-                          const input = document.getElementById('upload-file-url') as HTMLInputElement;
-                          if (!input?.value) { toast.error("Vui lòng nhập link file!"); return; }
-                          handleUpdateIdea({ designFileUrl: input.value, fileStatus: "pending_approval" });
+                          if (!fileUrlInput || !fileUrlInput.trim()) { toast.error("Vui lòng nhập link file!"); return; }
+                          if (!fileUrlInput.trim().startsWith("http://") && !fileUrlInput.trim().startsWith("https://")) {
+                            toast.error("Link file phải bắt đầu bằng http:// hoặc https://");
+                            return;
+                          }
+                          handleUpdateIdea({ designFileUrl: fileUrlInput.trim(), fileStatus: "pending_approval" });
                         }} disabled={saving}>
                           Nộp file thiết kế
                         </Button>
@@ -917,17 +939,22 @@ export default function IdeaDetailPage() {
                         placeholder="Cập nhật link file..."
                         className="h-7 text-xs"
                         id="update-file-url"
-                        onBlur={(e) => {
-                          if (e.target.value) handleUpdateIdea({ designFileUrl: e.target.value });
-                        }}
-                        defaultValue={idea.designFileUrl || ""}
+                        value={fileUrlInput}
+                        onChange={(e) => setFileUrlInput(e.target.value)}
                       />
-                      <Button size="sm" className="w-full h-7 text-xs bg-amber-600 hover:bg-amber-700 text-white" onClick={() => handleUpdateIdea({ fileStatus: "pending_approval" })} disabled={saving}>
+                      <Button size="sm" className="w-full h-7 text-xs bg-amber-600 hover:bg-amber-700 text-white" onClick={() => {
+                        if (!fileUrlInput || !fileUrlInput.trim()) { toast.error("Vui lòng nhập link file!"); return; }
+                        if (!fileUrlInput.trim().startsWith("http://") && !fileUrlInput.trim().startsWith("https://")) {
+                          toast.error("Link file phải bắt đầu bằng http:// hoặc https://");
+                          return;
+                        }
+                        handleUpdateIdea({ designFileUrl: fileUrlInput.trim(), fileStatus: "pending_approval" });
+                      }} disabled={saving}>
                         Nộp lại file đã sửa
                       </Button>
                     </div>
                   )}
-                  {(role === "manager" || role === "boss" || idea.createdById === session?.user?.id) && idea.fileStatus === "pending_approval" && (
+                  {(role === "manager" || role === "boss") && idea.status === "approved" && idea.fileStatus === "pending_approval" && (
                     <div className="flex flex-col gap-1.5">
                       <Button size="sm" className="w-full h-7 text-xs bg-green-600 hover:bg-green-700 text-white" onClick={() => handleUpdateIdea({ fileStatus: "approved" })} disabled={saving}>
                         Duyệt file

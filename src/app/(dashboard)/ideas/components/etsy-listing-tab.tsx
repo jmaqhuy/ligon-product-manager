@@ -1,5 +1,7 @@
 "use client";
 import React, { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { TabsContent } from "@/components/ui/tabs";
@@ -53,7 +55,10 @@ export function EtsyListingTab({
   session,
   canManagePhotos,
 }: EtsyListingTabProps) {
+  const queryClient = useQueryClient();
+  const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
+  const [photoSaving, setPhotoSaving] = useState(false);
   const listing = idea.etsyListing;
   const id = idea.id;
   const setSaving = (val: boolean) => {};
@@ -78,6 +83,11 @@ export function EtsyListingTab({
                         <CardHeader className="pb-2 flex flex-row items-center justify-between">
                           <CardTitle className="text-sm">Etsy Listing</CardTitle>
                           <div className="flex items-center gap-1">
+                            {role !== "employee" && (
+                              <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => setEditOpen(true)}>
+                                <Pencil className="h-3 w-3 mr-1" /> Sửa
+                              </Button>
+                            )}
                             {idea.etsyListing && (() => { try { const g = typeof idea.etsyListing.galleryImages === "string" ? JSON.parse(idea.etsyListing.galleryImages) : (idea.etsyListing.galleryImages || []); if (g.filter(Boolean).length > 0) return <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { g.filter(Boolean).forEach((url: string) => window.open(convertToDirectImageUrl(url) || url, "_blank")); }}><Download className="h-3 w-3 mr-1" /> Tải {g.filter(Boolean).length} ảnh</Button>; } catch { } return null; })()}
                             
                           </div>
@@ -136,8 +146,38 @@ export function EtsyListingTab({
                           </div>
                         </CardContent>
                       </Card>
-                    
-                
+                      <div className="bg-card rounded-lg border shadow-sm p-4">
+                        <PhotoGallery
+                          platform="etsy"
+                          listing={idea.etsyListing}
+                          form={etsyForm}
+                          setEditOpen={setEditOpen}
+                          handleUpdateListing={async (data) => {
+                            setPhotoSaving(true);
+                            try {
+                              const res = await fetch(`/api/ideas/${id}/etsy-listing`, {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify(data),
+                              });
+                              if (res.ok) {
+                                queryClient.invalidateQueries({ queryKey: ["ideas", id] });
+                                router.refresh();
+                                fetchIdea();
+                              }
+                              else toast.error("Lỗi cập nhật ảnh Etsy");
+                            } catch {
+                              toast.error("Lỗi hệ thống");
+                            } finally {
+                              setPhotoSaving(false);
+                            }
+                          }}
+                          saving={saving || photoSaving}
+                          canManagePhotos={!!canManagePhotos}
+                          session={session}
+                          idea={idea}
+                        />
+                      </div>
       </fieldset>
       <EtsyEditSheet
         ideaId={idea.id}

@@ -191,6 +191,9 @@ export async function PUT(
         photosUploaded,
         fulfillmentType: fulfillmentType ?? existing?.fulfillmentType,
         campAuto: campAuto ?? existing?.campAuto,
+        photoStatus: photoStatus !== undefined ? photoStatus : undefined,
+        photoAssigneeId: photoAssigneeId !== undefined ? photoAssigneeId : undefined,
+        photoRevisionNote: photoRevisionNote !== undefined ? photoRevisionNote : undefined,
         version: { increment: 1 },
       },
       create: {
@@ -217,6 +220,9 @@ export async function PUT(
         photosUploaded: photosUploaded ?? false,
         fulfillmentType: fulfillmentType || "FBA",
         campAuto: campAuto ?? false,
+        photoStatus: photoStatus || "not_requested",
+        photoAssigneeId: photoAssigneeId || null,
+        photoRevisionNote: photoRevisionNote || null,
       },
     });
 
@@ -239,6 +245,113 @@ export async function PUT(
     return NextResponse.json(listing);
   } catch (error) {
     console.error("PUT /api/ideas/[id]/amazon-listing error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
+// PATCH /api/ideas/[id]/amazon-listing - Strict Partial Update
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const { id } = await params;
+    const body = await req.json();
+
+    const idea = await db.idea.findUnique({ where: { id } });
+    if (!idea) {
+      return NextResponse.json({ error: "Idea not found" }, { status: 404 });
+    }
+
+    const existing = await db.amazonListing.findUnique({ where: { ideaId: id } });
+    if (existing && body.version !== undefined && body.version !== existing.version) {
+      return NextResponse.json(
+        { error: "Dữ liệu Amazon đã được cập nhật bởi người khác. Vui lòng tải lại trang." },
+        { status: 409 }
+      );
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updateData: any = { version: { increment: 1 } };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const createData: any = { ideaId: id, listingStatus: "ready", vineStatus: "not_enrolled", fulfillmentType: "FBA" };
+
+    const allowedFields = [
+      "sellingAccountId", "sku", "asin", "fnskuCode", "fnskuLabelFileUrl",
+      "itemName", "itemHighlights", "description", "tags", "slugs",
+      "useSharedMainImage", "videoUrl", "contentAPlusUrl", "listingStatus",
+      "listingStatusReason", "vineStatus", "photosUploaded", "fulfillmentType",
+      "campAuto", "photoStatus", "photoAssigneeId", "photoRevisionNote",
+      "contentSource", "contentVerifiedAt", "contentVerifiedById"
+    ];
+
+    for (const field of allowedFields) {
+      if (body[field] !== undefined) {
+        updateData[field] = body[field];
+        createData[field] = body[field];
+      }
+    }
+
+    if (body.price !== undefined) {
+      updateData.price = body.price ? parseFloat(body.price) : null;
+      createData.price = body.price ? parseFloat(body.price) : null;
+    }
+    if (body.bulletPoints !== undefined) {
+      const bpStr = typeof body.bulletPoints === "string" ? body.bulletPoints : JSON.stringify(body.bulletPoints);
+      updateData.bulletPoints = bpStr;
+      createData.bulletPoints = bpStr;
+    }
+    if (body.galleryImages !== undefined) {
+      const giStr = typeof body.galleryImages === "string" ? body.galleryImages : JSON.stringify(body.galleryImages);
+      updateData.galleryImages = giStr;
+      createData.galleryImages = giStr;
+    }
+
+    const listing = await db.amazonListing.upsert({
+      where: { ideaId: id },
+      update: updateData,
+      create: createData,
+    });
+
+    // Notifications for Photo Management
+    const { broadcastNotification } = await import("@/lib/socket-helper");
+    if (existing) {
+      const photoStatus = body.photoStatus;
+      const photoAssigneeId = body.photoAssigneeId;
+      const photoRevisionNote = body.photoRevisionNote;
+      if (photoStatus === "awaiting_photos" && existing.photoStatus !== "awaiting_photos" && session.user.id !== idea.createdById) {
+        await db.notification.create({
+          data: { userId: idea.createdById, type: "photo_requested", category: "photo", message: `Sếp/Quản lý đã yêu cầu làm ảnh Amazon cho ý tưởng ${idea.msku}.`, actionUrl: `/ideas/${idea.id}` }
+        });
+        broadcastNotification([idea.createdById], { type: "photo_requested", message: `Yêu cầu làm ảnh Amazon cho ý tưởng ${idea.msku}.`, actionUrl: `/ideas/${idea.id}` });
+      }
+      if (photoAssigneeId && photoAssigneeId !== existing.photoAssigneeId && photoAssigneeId !== session.user.id) {
+        await db.notification.create({
+          data: { userId: photoAssigneeId, type: "photo_assigned", category: "photo", message: `Bạn được giao làm ảnh Amazon cho ý tưởng ${idea.msku}.`, actionUrl: `/ideas/${idea.id}` }
+        });
+        broadcastNotification([photoAssigneeId], { type: "photo_assigned", message: `Được giao ảnh Amazon ý tưởng ${idea.msku}.`, actionUrl: `/ideas/${idea.id}` });
+      }
+      if (photoStatus === "approved" && existing.photoStatus !== "approved" && existing.photoAssigneeId) {
+        await db.notification.create({
+          data: { userId: existing.photoAssigneeId, type: "photo_approved", category: "photo", message: `Ảnh Amazon của ${idea.msku} đã được duyệt!`, actionUrl: `/ideas/${idea.id}` }
+        });
+        broadcastNotification([existing.photoAssigneeId], { type: "photo_approved", message: `Ảnh Amazon ${idea.msku} được duyệt!`, actionUrl: `/ideas/${idea.id}` });
+      }
+      if (photoStatus === "revision_requested" && existing.photoStatus !== "revision_requested" && existing.photoAssigneeId) {
+        await db.notification.create({
+          data: { userId: existing.photoAssigneeId, type: "photo_revision_requested", category: "photo", message: `Ảnh Amazon của ${idea.msku} cần chỉnh sửa. Lý do: ${photoRevisionNote || "Không có"}`, actionUrl: `/ideas/${idea.id}` }
+        });
+        broadcastNotification([existing.photoAssigneeId], { type: "photo_revision_requested", message: `Ảnh Amazon ${idea.msku} cần sửa.`, actionUrl: `/ideas/${idea.id}` });
+      }
+    }
+
+    return NextResponse.json(listing);
+  } catch (error) {
+    console.error("PATCH /api/ideas/[id]/amazon-listing error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

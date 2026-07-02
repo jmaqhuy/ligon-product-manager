@@ -31,6 +31,7 @@ model User {
   ideas                Idea[]           @relation("CreatedBy")
   assignedFiles        Idea[]           @relation("FileAssignee")
   amazonAssignedPhotos AmazonListing[]  @relation("AmazonPhotoAssignee")
+  amazonVerifiedContent AmazonListing[] @relation("AmazonContentVerifier")
   etsyAssignedPhotos   EtsyListing[]    @relation("EtsyPhotoAssignee")
   sellingAccounts      SellingAccount[] @relation("AccountCreatedBy")
   notifications   Notification[]
@@ -74,6 +75,9 @@ model Idea {
   source            String   @default("employee") @map("source") // employee | boss | partner
   partnerId         String?  @map("partner_id")
   partnerLabel      String?  @map("partner_label")
+  // AI Generation server-side lock (Deadlock Protection: auto-release after 5 min)
+  aiGeneratingStatus    Boolean   @default(false) @map("ai_generating_status")
+  aiGeneratingStartedAt DateTime? @map("ai_generating_started_at")
   version           Int      @default(1)
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
@@ -124,14 +128,19 @@ model AmazonListing {
   photoStatus         String   @default("not_requested") @map("photo_status") // not_requested | awaiting_photos | pending_approval | revision_requested | approved
   photoAssigneeId     String?  @map("photo_assignee_id")
   photoRevisionNote   String?  @map("photo_revision_note")
+  // AI content tracking & verification
+  contentSource       String   @default("manual") @map("content_source") // manual | ai
+  contentVerifiedAt   DateTime? @map("content_verified_at")
+  contentVerifiedById String?  @map("content_verified_by")
   version             Int      @default(1)
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
   // Relations
-  idea           Idea            @relation(fields: [ideaId], references: [id], onDelete: Cascade)
-  sellingAccount SellingAccount? @relation(fields: [sellingAccountId], references: [id])
-  photoAssignee  User?           @relation("AmazonPhotoAssignee", fields: [photoAssigneeId], references: [id])
+  idea               Idea            @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  sellingAccount     SellingAccount? @relation(fields: [sellingAccountId], references: [id])
+  photoAssignee      User?           @relation("AmazonPhotoAssignee", fields: [photoAssigneeId], references: [id])
+  contentVerifiedBy  User?           @relation("AmazonContentVerifier", fields: [contentVerifiedById], references: [id])
 
   @@map("amazon_listings")
 }

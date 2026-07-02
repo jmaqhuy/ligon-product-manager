@@ -59,6 +59,11 @@ const navItems = [
     icon: Lightbulb,
   },
   {
+    title: "Công việc",
+    href: "/my-tasks",
+    icon: ClipboardList,
+  },
+  {
     title: "Sản xuất",
     href: "/production",
     icon: Factory,
@@ -67,11 +72,6 @@ const navItems = [
     title: "File SX",
     href: "/production/layouts",
     icon: Layers,
-  },
-  {
-    title: "Công việc",
-    href: "/my-tasks",
-    icon: ClipboardList,
   },
   {
     title: "Đơn hàng",
@@ -134,11 +134,11 @@ export function AppSidebar() {
             <SidebarMenuButton size="lg" asChild>
               <Link href="/dashboard" className="gap-3">
                 <div className="flex items-center justify-center h-8 shrink-0">
-                  <Image 
-                    src="/logo.svg" 
-                    alt="Logo" 
-                    width={429} 
-                    height={512} 
+                  <Image
+                    src="/logo.svg"
+                    alt="Logo"
+                    width={429}
+                    height={512}
                     className="h-full w-auto object-contain"
                     priority
                     unoptimized

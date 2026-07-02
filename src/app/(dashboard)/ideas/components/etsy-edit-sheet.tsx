@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +38,8 @@ export function EtsyEditSheet({
   onSuccess,
 }: EtsyEditSheetProps) {
   const [saving, setSaving] = useState(false);
+  const queryClient = useQueryClient();
+  const router = useRouter();
   const [form, setForm] = useState({
     sellingAccountId: "", title: "", listingId: "", tags: [] as string[],
     tagsInput: "", description: "", price: "", useSharedMainImage: true,
@@ -112,6 +116,8 @@ export function EtsyEditSheet({
       if (res.ok) {
         toast.success("Đã lưu Etsy Listing!");
         onSuccess();
+        queryClient.invalidateQueries({ queryKey: ["ideas", ideaId] });
+        router.refresh();
         onOpenChange(false);
       } else {
         const data = await res.json();

@@ -153,8 +153,24 @@ export async function PATCH(
 
     // File status & assignee
     if (body.fileStatus !== undefined && body.fileStatus !== idea.fileStatus) {
+      const currentIdeaStatus = body.status !== undefined ? body.status : idea.status;
+      if (currentIdeaStatus !== "approved") {
+        return NextResponse.json({ error: "Ý tưởng phải được duyệt trước khi thực hiện quy trình file thiết kế" }, { status: 400 });
+      }
+      if (["awaiting_file", "approved", "revision_requested"].includes(body.fileStatus)) {
+        if (currentRole !== "manager" && currentRole !== "boss") {
+          return NextResponse.json({ error: "Bạn không có quyền quản lý/duyệt file thiết kế" }, { status: 403 });
+        }
+      } else if (body.fileStatus === "pending_approval") {
+        if (currentRole !== "manager" && currentRole !== "boss" && idea.fileAssigneeId && idea.fileAssigneeId !== session.user.id) {
+          return NextResponse.json({ error: "Bạn không được giao thực hiện nhiệm vụ thiết kế này" }, { status: 403 });
+        }
+      }
       auditEntries.push({ field: "fileStatus", oldVal: idea.fileStatus, newVal: body.fileStatus });
       updateData.fileStatus = body.fileStatus;
+      if (body.fileStatus === "approved" && body.fileRevisionNote === undefined) {
+        updateData.fileRevisionNote = null;
+      }
     }
     if (body.fileAssigneeId !== undefined) {
       updateData.fileAssigneeId = body.fileAssigneeId;

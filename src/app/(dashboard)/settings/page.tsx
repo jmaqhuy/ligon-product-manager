@@ -25,11 +25,15 @@ import {
   BellRing,
   Camera,
   Save,
+  Sparkles,
+  DollarSign,
 } from "lucide-react";
 import { toast } from "sonner";
 import { roleLabels } from "@/types";
 import type { Role } from "@/lib/permissions";
 import { apiFetch } from "@/lib/api-client";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AI_MODEL_PRICING_LIST } from "@/lib/ai/constants";
 
 export default function SettingsPage() {
   const { data: session, update: updateSession } = useSession();
@@ -52,6 +56,9 @@ export default function SettingsPage() {
   });
   const [savingSettings, setSavingSettings] = useState(false);
 
+  const [aiContentModel, setAiContentModel] = useState("gpt-4o-mini");
+  const [savingAiModel, setSavingAiModel] = useState(false);
+
   useEffect(() => { 
     setMounted(true);
     if (session?.user) {
@@ -62,7 +69,29 @@ export default function SettingsPage() {
         } catch {}
       }
     }
+    apiFetch("/api/metadata/rules").then(({ data }) => {
+      if (data?.ai_content_model) {
+        setAiContentModel(data.ai_content_model);
+      }
+    });
   }, [session]);
+
+  const handleSaveAiModel = async () => {
+    setSavingAiModel(true);
+    try {
+      await apiFetch("/api/metadata/rules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ updates: { ai_content_model: aiContentModel } }),
+        successMessage: "Đã cập nhật mô hình AI viết nội dung",
+      });
+    } finally {
+      setSavingAiModel(false);
+    }
+  };
+
+  const isBossOrManager = session?.user?.role === "boss" || session?.user?.role === "manager";
+  const selectedAiPricing = AI_MODEL_PRICING_LIST.find((p) => p.model === aiContentModel) || AI_MODEL_PRICING_LIST[0];
 
   const handleSaveSettings = async () => {
     setSavingSettings(true);
@@ -189,6 +218,71 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* AI Content Model Settings (Boss/Manager Only) */}
+      {isBossOrManager && (
+        <Card className="border-violet-500/30 shadow-md">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2 text-violet-600 dark:text-violet-400">
+              <Sparkles className="h-4 w-4" />
+              Mô hình AI viết nội dung Amazon Listing (Boss / Manager)
+            </CardTitle>
+            <CardDescription>
+              Lựa chọn mô hình AI để tự động tạo Listing chuẩn Big Tech. Cài đặt này áp dụng chung cho toàn hệ thống khi bấm nút &quot;Tạo bằng AI&quot;.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Mô hình OpenAI đang sử dụng</Label>
+              <Select value={aiContentModel} onValueChange={setAiContentModel}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Chọn mô hình AI" />
+                </SelectTrigger>
+                <SelectContent>
+                  {AI_MODEL_PRICING_LIST.map((p) => (
+                    <SelectItem key={p.model} value={p.model}>
+                      <span className="font-semibold">{p.name}</span> <span className="text-muted-foreground text-xs">({p.model})</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {selectedAiPricing && (
+              <div className="bg-muted/60 p-4 rounded-lg border border-border/60 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold flex items-center gap-1.5 text-foreground">
+                    <DollarSign className="h-4 w-4 text-emerald-600" /> Bảng giá ước tính (Theo tài liệu pricing.md)
+                  </span>
+                  <Badge variant="outline" className="text-xs bg-background">Chuẩn 1 triệu token</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground italic">{selectedAiPricing.description}</p>
+                <div className="grid grid-cols-3 gap-2 pt-1">
+                  <div className="bg-background/80 p-2.5 rounded border text-center">
+                    <div className="text-[10px] text-muted-foreground uppercase font-bold">Input (Thường)</div>
+                    <div className="text-sm font-bold text-foreground mt-0.5">${selectedAiPricing.inputPricePerM} <span className="text-[10px] font-normal text-muted-foreground">/ 1M</span></div>
+                  </div>
+                  <div className="bg-background/80 p-2.5 rounded border text-center">
+                    <div className="text-[10px] text-muted-foreground uppercase font-bold">Input (Cached RAM)</div>
+                    <div className="text-sm font-bold text-emerald-600 mt-0.5">${selectedAiPricing.cachedInputPricePerM} <span className="text-[10px] font-normal text-muted-foreground">/ 1M</span></div>
+                  </div>
+                  <div className="bg-background/80 p-2.5 rounded border text-center">
+                    <div className="text-[10px] text-muted-foreground uppercase font-bold">Output (Sinh chữ)</div>
+                    <div className="text-sm font-bold text-indigo-600 mt-0.5">${selectedAiPricing.outputPricePerM} <span className="text-[10px] font-normal text-muted-foreground">/ 1M</span></div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end pt-2">
+              <Button onClick={handleSaveAiModel} disabled={savingAiModel} className="bg-violet-600 hover:bg-violet-700 text-white shadow-sm" type="button">
+                {savingAiModel ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                Lưu cài đặt AI
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Notification Settings */}
       <Card>

@@ -121,6 +121,8 @@ export async function GET(req: NextRequest) {
       amazonListingStatus: idea.amazonListing?.listingStatus,
       etsyListingStatus: idea.etsyListing?.listingStatus,
       fulfillmentType: idea.amazonListing?.fulfillmentType || "FBM",
+      fileStatus: idea.fileStatus || "not_requested",
+      designFileUrl: idea.designFileUrl || null,
     }));
 
     return NextResponse.json({
@@ -262,6 +264,10 @@ export async function POST(req: Request) {
             thicknessMm: thicknessMm || null,
             material: material || null,
             designFileUrl: designFileUrl || null,
+            ...(designFileUrl && designFileUrl.trim() !== "" ? {
+              fileStatus: "pending_approval",
+              fileAssignee: { connect: { id: session.user.id } },
+            } : {}),
             amazonListing: {
               create: {
                 sku: msku,
@@ -320,6 +326,8 @@ export async function POST(req: Request) {
       amazonListingStatus: idea.amazonListing?.listingStatus,
       etsyListingStatus: idea.etsyListing?.listingStatus,
       fulfillmentType: idea.amazonListing?.fulfillmentType || "FBM",
+      fileStatus: idea.fileStatus || "not_requested",
+      designFileUrl: idea.designFileUrl || null,
     };
 
     // Audit log

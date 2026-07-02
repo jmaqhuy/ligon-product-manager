@@ -1,11 +1,14 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { PhotoGallery } from "./photo-gallery";
-import { ExternalLink, Pencil, Printer, Download, Copy, ShoppingBag } from "lucide-react";
+import { ExternalLink, Pencil, Printer, Download, Copy, ShoppingBag, Sparkles, ShieldCheck, Loader2 } from "lucide-react";
+import { AIGenerateButton } from "@/components/ai-generate-button";
 import { toast } from "sonner";
 import { Dialog, DialogTrigger, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -55,7 +58,10 @@ export function AmazonListingTab({
   session,
   canManagePhotos,
 }: AmazonListingTabProps) {
+  const queryClient = useQueryClient();
+  const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
+  const [editSection, setEditSection] = useState<"all" | "info" | "premium" | "content">("all");
   const [labelPrintQty, setLabelPrintQty] = useState(1);
   const [changeFulfillmentOpen, setChangeFulfillmentOpen] = useState(false);
   const [pendingFulfillment, setPendingFulfillment] = useState("");
@@ -65,6 +71,67 @@ export function AmazonListingTab({
 
   const handleUpdateIdea = async (data: any) => { };
   const setSaving = (val: boolean) => { };
+
+  const [aiGenerating, setAiGenerating] = useState(false);
+  // Combine server-side lock (persists across F5) + local state (instant UI feedback)
+  const isAiBusy = idea.aiGeneratingStatus || aiGenerating;
+
+  useEffect(() => {
+    if (idea.aiGeneratingStatus === false && aiGenerating) {
+      setAiGenerating(false);
+    }
+  }, [idea.aiGeneratingStatus, aiGenerating]);
+
+  const handleGenerateAiListing = async () => {
+    if (isAiBusy) return;
+    setAiGenerating(true); // Optimistic UI lock
+    const toastId = toast.loading("⏳ AI bắt đầu phân tích ảnh và viết Listing...");
+    try {
+      const res = await fetch(`/api/ideas/${idea.id}/generate-listing`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Có lỗi xảy ra khi gọi AI");
+      }
+      toast.success("Tiến trình AI đã khởi chạy! Dữ liệu sẽ tự động hiển thị khi hoàn tất.", {
+        id: toastId,
+      });
+      if (fetchIdea) fetchIdea(); // Fetch to get aiGeneratingStatus = true from server
+    } catch (err: any) {
+      toast.error(err.message || "Khởi chạy AI thất bại", { id: toastId });
+      setAiGenerating(false);
+    }
+    // No finally { setAiGenerating(false) } — server broadcast will update idea.aiGeneratingStatus
+  };
+
+  const [verifying, setVerifying] = useState(false);
+  const handleVerifyContent = async () => {
+    setVerifying(true);
+    try {
+      const isVerified = !!listing?.contentVerifiedAt;
+      const res = await fetch(`/api/ideas/${idea.id}/amazon-listing`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contentVerifiedAt: isVerified ? null : new Date().toISOString(),
+          contentVerifiedById: isVerified ? null : session?.user?.id,
+          version: listing?.version,
+        }),
+      });
+      if (res.ok) {
+        toast.success(isVerified ? "Đã bỏ xác nhận nội dung" : "Đã xác nhận nội dung!");
+        if (fetchIdea) fetchIdea();
+      } else {
+        const data = await res.json();
+        toast.error(data.error || "Lỗi xác nhận nội dung");
+      }
+    } catch {
+      toast.error("Lỗi hệ thống");
+    } finally {
+      setVerifying(false);
+    }
+  };
 
   return (
     <>
@@ -82,7 +149,7 @@ export function AmazonListingTab({
                   <div className="flex items-center justify-between">
                     <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Information</h3>
                     {role !== "employee" && (
-                      <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => setEditOpen(true)}>
+                      <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => { setEditSection("info"); setEditOpen(true); }}>
                         <Pencil className="h-3 w-3 mr-1" /> Sửa
                       </Button>
                     )}
@@ -245,7 +312,11 @@ export function AmazonListingTab({
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify(data),
                         });
-                        if (res.ok) fetchIdea();
+                        if (res.ok) {
+                          queryClient.invalidateQueries({ queryKey: ["ideas", id] });
+                          router.refresh();
+                          fetchIdea();
+                        }
                         else toast.error("Lỗi cập nhật ảnh Amazon");
                       } catch {
                         toast.error("Lỗi hệ thống");
@@ -265,7 +336,7 @@ export function AmazonListingTab({
                   <div className="flex items-center justify-between">
                     <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Premium Content</h3>
                     {role !== "employee" && (
-                      <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => setEditOpen(true)}>
+                      <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => { setEditSection("premium"); setEditOpen(true); }}>
                         <Pencil className="h-3 w-3 mr-1" /> Sửa
                       </Button>
                     )}
@@ -295,30 +366,72 @@ export function AmazonListingTab({
               {/* ─── RIGHT COLUMN: CONTENT ─── */}
               <div className="bg-card rounded-lg border shadow-sm p-4 space-y-3 lg:col-span-3 h-fit">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Content</h3>
-                  {role !== "employee" && (
-                    <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => setEditOpen(true)}>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Content</h3>
+                    {listing?.contentSource === "ai" && (
+                      listing?.contentVerifiedAt ? (
+                        <Badge className="text-[9px] h-4 px-1.5 bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800 gap-1">
+                          <ShieldCheck className="h-3 w-3" />
+                          AI • Đã duyệt
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[9px] h-4 px-1.5 bg-violet-50 text-violet-600 border-violet-200 dark:bg-violet-900/20 dark:text-violet-400 dark:border-violet-800 gap-1 animate-pulse">
+                          <Sparkles className="h-3 w-3" />
+                          AI Generated
+                        </Badge>
+                      )
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {listing?.contentSource === "ai" && (role === "manager" || role === "boss") && (
+                      <Button
+                        size="sm"
+                        variant={listing?.contentVerifiedAt ? "outline" : "default"}
+                        className={listing?.contentVerifiedAt
+                          ? "h-6 text-[10px] px-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400"
+                          : "h-6 text-[10px] px-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                        }
+                        onClick={handleVerifyContent}
+                        disabled={verifying || saving}
+                        type="button"
+                      >
+                        {verifying ? (
+                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        ) : (
+                          <ShieldCheck className="h-3 w-3 mr-1" />
+                        )}
+                        {listing?.contentVerifiedAt ? "Bỏ duyệt" : "Duyệt nội dung"}
+                      </Button>
+                    )}
+                    {(role === "manager" || role === "boss" ? idea.status !== "rejected" : idea.status === "approved") && (
+                      <AIGenerateButton
+                        isGenerating={isAiBusy}
+                        disabled={saving}
+                        onClick={handleGenerateAiListing}
+                      />
+                    )}
+                    <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => { setEditSection("content"); setEditOpen(true); }} type="button">
                       <Pencil className="h-3 w-3 mr-1" /> Sửa
                     </Button>
-                  )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="group/iname flex flex-col justify-center rounded-md bg-muted/40 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative">
-                    <div className="flex items-center gap-2 mb-1"><span className="text-xs font-semibold text-muted-foreground block">Title (Item Name)</span><Badge variant="outline" className="text-[9px] font-mono font-medium h-4 px-1.5 border-primary/20 bg-primary/5 text-primary/70">75 ký tự max</Badge></div>
+                    <div className="flex items-center gap-2 mb-1"><span className="text-xs font-semibold text-muted-foreground block">Title (Item Name)</span><Badge variant="outline" className="text-[9px] font-mono font-medium h-4 px-1.5 border-primary/20 bg-primary/5 text-primary/70">{(idea.amazonListing?.itemName || "").length}/75</Badge></div>
                     <span className="text-xs font-medium pr-6">{idea.amazonListing?.itemName || "—"}</span>
                     {idea.amazonListing?.itemName && <CopyButton text={idea.amazonListing.itemName} className="absolute right-2 top-2 h-5 w-5 opacity-0 group-hover/iname:opacity-100 transition-opacity bg-background" />}
                   </div>
 
                   <div className="group/ihigh flex flex-col justify-center rounded-md bg-muted/40 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative">
-                    <div className="flex items-center gap-2 mb-1"><span className="text-xs font-semibold text-muted-foreground block">Item Highlights</span><Badge variant="outline" className="text-[9px] font-mono font-medium h-4 px-1.5 border-primary/20 bg-primary/5 text-primary/70">125 ký tự max</Badge></div>
+                    <div className="flex items-center gap-2 mb-1"><span className="text-xs font-semibold text-muted-foreground block">Item Highlights</span><Badge variant="outline" className="text-[9px] font-mono font-medium h-4 px-1.5 border-primary/20 bg-primary/5 text-primary/70">{(idea.amazonListing?.itemHighlights || "").length}/125</Badge></div>
                     <span className="text-xs font-medium pr-6">{idea.amazonListing?.itemHighlights || "—"}</span>
                     {idea.amazonListing?.itemHighlights && <CopyButton text={idea.amazonListing.itemHighlights} className="absolute right-2 top-2 h-5 w-5 opacity-0 group-hover/ihigh:opacity-100 transition-opacity bg-background" />}
                   </div>
                 </div>
 
                 <div className="group/idesc flex flex-col rounded-md bg-muted/40 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative">
-                  <div className="flex items-center gap-2 mb-1.5"><span className="text-xs font-semibold text-muted-foreground block">Description</span><Badge variant="outline" className="text-[9px] font-mono font-medium h-4 px-1.5 border-primary/20 bg-primary/5 text-primary/70">500 - 2000 ký tự</Badge></div>
+                  <div className="flex items-center gap-2 mb-1.5"><span className="text-xs font-semibold text-muted-foreground block">Description</span><Badge variant="outline" className="text-[9px] font-mono font-medium h-4 px-1.5 border-primary/20 bg-primary/5 text-primary/70">{(idea.amazonListing?.description || "").length}/2000</Badge></div>
                   <div className="text-xs font-medium whitespace-pre-wrap pr-6">
                     {idea.amazonListing?.description || "—"}
                   </div>
@@ -329,7 +442,7 @@ export function AmazonListingTab({
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-semibold text-muted-foreground block">Bullet Points</span>
-                      <Badge variant="outline" className="text-[9px] font-mono font-medium h-4 px-1.5 border-primary/20 bg-primary/5 text-primary/70">5 bullets, 255 ký tự max/bullet</Badge>
+                      <Badge variant="outline" className="text-[9px] font-mono font-medium h-4 px-1.5 border-primary/20 bg-primary/5 text-primary/70">{(() => { try { const bps = JSON.parse(idea.amazonListing?.bulletPoints || "[]").filter(Boolean); return `${bps.length}/5 bullets`; } catch { return "0/5 bullets"; } })()}</Badge>
                     </div>
                     <Button variant="outline" size="sm" className="h-5 text-[9px] px-2 py-0" onClick={() => { try { const bps = JSON.parse(idea.amazonListing?.bulletPoints || "[]").filter(Boolean); if (bps.length > 0) { navigator.clipboard.writeText(bps.join("\n")); toast.success("Đã copy toàn bộ Bullets"); } } catch { } }}><Copy className="h-3 w-3 mr-1" /> Copy tất cả</Button>
                   </div>
@@ -340,9 +453,14 @@ export function AmazonListingTab({
                       return (
                         <div className="space-y-1.5 mt-1">
                           {bps.map((bp: string, i: number) => (
-                            <div key={i} className="group/bp rounded-md bg-background/50 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative flex items-start gap-2">
-                              <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 mt-1.5 shrink-0" />
-                              <p className="text-xs pr-6 leading-relaxed">{bp}</p>
+                            <div key={i} className="group/bp rounded-md bg-background/50 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative flex items-start justify-between gap-2">
+                              <div className="flex items-start gap-2 pr-12">
+                                <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 mt-1.5 shrink-0" />
+                                <p className="text-xs leading-relaxed">{bp}</p>
+                              </div>
+                              <Badge variant="outline" className="text-[9px] font-mono font-medium h-4 px-1.5 border-primary/20 bg-primary/5 text-primary/70 shrink-0">
+                                {bp.length}/255
+                              </Badge>
                               <CopyButton text={bp} className="absolute right-2 top-2 h-5 w-5 opacity-0 group-hover/bp:opacity-100 transition-opacity bg-background" />
                             </div>
                           ))}
@@ -354,7 +472,7 @@ export function AmazonListingTab({
 
                 <div className="grid grid-cols-2 gap-3 pt-1">
                   <div className="group/itags flex flex-col rounded-md bg-muted/40 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative">
-                    <div className="flex items-center gap-2 mb-1.5 shrink-0"><span className="text-xs font-semibold text-muted-foreground block">Tags</span><Badge variant="outline" className="text-[9px] font-mono font-medium h-4 px-1.5 border-primary/20 bg-primary/5 text-primary/70">500 ký tự max</Badge></div>
+                    <div className="flex items-center gap-2 mb-1.5 shrink-0"><span className="text-xs font-semibold text-muted-foreground block">Tags</span><Badge variant="outline" className="text-[9px] font-mono font-medium h-4 px-1.5 border-primary/20 bg-primary/5 text-primary/70">{(() => { let raw = idea.amazonListing?.tags || ""; try { if (raw.trim().startsWith("[")) raw = JSON.parse(raw).join("; "); } catch {} return `${raw.length}/500`; })()}</Badge></div>
                     {(() => {
                       let tags: string[] = [];
                       const rawTags = idea.amazonListing?.tags || "";
@@ -401,7 +519,7 @@ export function AmazonListingTab({
                     })()}
                   </div>
                   <div className="group/islug flex flex-col rounded-md bg-muted/40 px-3 py-2 border border-transparent hover:border-border/50 transition-colors relative">
-                    <div className="flex items-center gap-2 mb-1.5 shrink-0"><span className="text-xs font-semibold text-muted-foreground block">Slugs</span><Badge variant="outline" className="text-[9px] font-mono font-medium h-4 px-1.5 border-primary/20 bg-primary/5 text-primary/70">12 slugs max</Badge></div>
+                    <div className="flex items-center gap-2 mb-1.5 shrink-0"><span className="text-xs font-semibold text-muted-foreground block">Slugs</span><Badge variant="outline" className="text-[9px] font-mono font-medium h-4 px-1.5 border-primary/20 bg-primary/5 text-primary/70">{(() => { let raw = idea.amazonListing?.slugs || ""; try { if (raw.trim().startsWith("[")) raw = JSON.parse(raw).join("\n"); } catch {} return `${raw.split("\n").filter(Boolean).length}/12`; })()}</Badge></div>
                     {(() => {
                       let slugs: string[] = [];
                       const rawSlugs = idea.amazonListing?.slugs || "";
@@ -453,6 +571,7 @@ export function AmazonListingTab({
           open={editOpen}
           onOpenChange={setEditOpen}
           onSuccess={fetchIdea}
+          section={editSection}
         />
       </TabsContent>
     </>
